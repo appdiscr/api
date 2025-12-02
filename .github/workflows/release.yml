@@ -11,7 +11,7 @@ permissions: read-all
 
 jobs:
   release:
-    uses: "Mosher-Labs/.github/.github/workflows/release.yml@main"
+    uses: "appdiscr/.github/.github/workflows/release.yml@main"
     secrets: inherit
     permissions:
       contents: write
