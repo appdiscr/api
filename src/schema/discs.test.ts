@@ -16,10 +16,13 @@ describe('discs schema', () => {
     expect(columnNames).toContain('qr_code_id');
     expect(columnNames).toContain('name');
     expect(columnNames).toContain('manufacturer');
+    expect(columnNames).toContain('mold');
     expect(columnNames).toContain('plastic');
     expect(columnNames).toContain('weight');
+    expect(columnNames).toContain('color');
     expect(columnNames).toContain('flight_numbers');
     expect(columnNames).toContain('reward_amount');
+    expect(columnNames).toContain('notes');
     expect(columnNames).toContain('created_at');
     expect(columnNames).toContain('updated_at');
   });
@@ -42,12 +45,15 @@ describe('discs schema', () => {
     expect(columns.qr_code_id.dataType).toBe('string');
   });
 
-  it('should have name, manufacturer, plastic as text', () => {
+  it('should have name, manufacturer, mold, plastic, color, notes as text', () => {
     const columns = getTableColumns(discs);
     expect(columns.name.dataType).toBe('string');
     expect(columns.name.notNull).toBe(true);
     expect(columns.manufacturer.dataType).toBe('string');
+    expect(columns.mold.dataType).toBe('string');
     expect(columns.plastic.dataType).toBe('string');
+    expect(columns.color.dataType).toBe('string');
+    expect(columns.notes.dataType).toBe('string');
   });
 
   it('should have weight as integer', () => {

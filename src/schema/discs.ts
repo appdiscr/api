@@ -37,10 +37,13 @@ export const discs = pgTable('discs', {
   qr_code_id: uuid('qr_code_id').references(() => qrCodes.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
   manufacturer: text('manufacturer'),
+  mold: text('mold'),
   plastic: text('plastic'),
   weight: integer('weight'),
+  color: text('color'),
   flight_numbers: jsonb('flight_numbers').$type<FlightNumbers>().notNull(),
   reward_amount: integer('reward_amount'),
+  notes: text('notes'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
