@@ -126,6 +126,15 @@ Deno.serve(async (req) => {
   // Path: {user_id}/{disc_id}/{photo_type}.{extension}
   const storagePath = `${user.id}/${discId}/${photoType}.${extension}`;
 
+  console.log('Upload details:', {
+    userId: user.id,
+    discId,
+    photoType,
+    storagePath,
+    fileSize: file.size,
+    fileType: file.type,
+  });
+
   const { error: uploadError } = await supabase.storage.from('disc-photos').upload(storagePath, file, {
     contentType: file.type,
     upsert: true, // Replace if exists
@@ -133,10 +142,24 @@ Deno.serve(async (req) => {
 
   if (uploadError) {
     console.error('Storage upload error:', uploadError);
-    return new Response(JSON.stringify({ error: 'Failed to upload photo', details: uploadError.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
+    console.error('Upload error details:', {
+      message: uploadError.message,
+      statusCode: uploadError.statusCode,
+      error: uploadError.error,
+      path: storagePath,
     });
+    return new Response(
+      JSON.stringify({
+        error: 'Failed to upload photo',
+        details: uploadError.message,
+        path: storagePath,
+        statusCode: uploadError.statusCode,
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
   }
 
   // Create disc_photos record
