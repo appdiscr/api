@@ -3,7 +3,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const VALID_PHOTO_TYPES = ['photo-1', 'photo-2', 'photo-3', 'photo-4'];
+
+// Generate a random ID for photo
+function generatePhotoId(): string {
+  return crypto.randomUUID();
+}
 
 Deno.serve(async (req) => {
   // Only allow POST requests
@@ -63,19 +67,11 @@ Deno.serve(async (req) => {
 
   // Extract fields
   const discId = formData.get('disc_id') as string;
-  const photoType = formData.get('photo_type') as string;
   const file = formData.get('file') as File;
 
   // Validate required fields
   if (!discId) {
     return new Response(JSON.stringify({ error: 'disc_id is required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  if (!photoType || !VALID_PHOTO_TYPES.includes(photoType)) {
-    return new Response(JSON.stringify({ error: 'photo_type must be one of: photo-1, photo-2, photo-3, photo-4' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -128,14 +124,18 @@ Deno.serve(async (req) => {
   // Determine file extension
   const extension = file.type === 'image/jpeg' ? 'jpg' : file.type === 'image/png' ? 'png' : 'webp';
 
+  // Generate unique photo ID
+  const photoId = generatePhotoId();
+
   // Upload file to storage
-  // Path: {user_id}/{disc_id}/{photo_type}.{extension}
-  const storagePath = `${user.id}/${discId}/${photoType}.${extension}`;
+  // Path: {user_id}/{disc_id}/{photo_id}.{extension}
+  const storagePath = `${user.id}/${discId}/${photoId}.${extension}`;
+  const photoType = photoId; // Store the UUID as photo_type for uniqueness
 
   console.log('Upload details:', {
     userId: user.id,
     discId,
-    photoType,
+    photoId,
     storagePath,
     fileSize: file.size,
     fileType: file.type,
@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
   // Use admin client for storage upload (bypasses RLS since we already verified ownership)
   const { error: uploadError } = await supabaseAdmin.storage.from('disc-photos').upload(storagePath, file, {
     contentType: file.type,
-    upsert: true, // Replace if exists
+    upsert: false, // Don't replace - each photo has a unique ID
   });
 
   if (uploadError) {
