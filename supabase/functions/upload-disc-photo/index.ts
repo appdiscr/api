@@ -23,14 +23,20 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Create Supabase client
+  // Create Supabase client for auth (with user's token)
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
       headers: { Authorization: authHeader },
     },
   });
+
+  // Create admin client for storage operations (bypasses RLS)
+  // We use this after verifying ownership to avoid RLS issues with auth.uid() in edge functions
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
   // Verify user is authenticated
   const {
@@ -135,7 +141,8 @@ Deno.serve(async (req) => {
     fileType: file.type,
   });
 
-  const { error: uploadError } = await supabase.storage.from('disc-photos').upload(storagePath, file, {
+  // Use admin client for storage upload (bypasses RLS since we already verified ownership)
+  const { error: uploadError } = await supabaseAdmin.storage.from('disc-photos').upload(storagePath, file, {
     contentType: file.type,
     upsert: true, // Replace if exists
   });
@@ -182,8 +189,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Get signed URL for the photo
-  const { data: urlData } = await supabase.storage.from('disc-photos').createSignedUrl(storagePath, 3600); // 1 hour expiry
+  // Get signed URL for the photo (use admin client)
+  const { data: urlData } = await supabaseAdmin.storage.from('disc-photos').createSignedUrl(storagePath, 3600); // 1 hour expiry
 
   return new Response(
     JSON.stringify({
