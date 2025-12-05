@@ -66,21 +66,34 @@ Deno.serve(async (req) => {
       const photosWithUrls = await Promise.all(
         (disc.photos || []).map(
           async (photo: { id: string; storage_path: string; photo_type: string; created_at: string }) => {
-            const { data: urlData } = await supabase.storage
+            const { data: urlData, error: urlError } = await supabase.storage
               .from('disc-photos')
               .createSignedUrl(photo.storage_path, 3600); // 1 hour expiry
 
+            if (urlError) {
+              console.error(`Failed to create signed URL for photo ${photo.id}:`, urlError);
+              console.error(`  Storage path: ${photo.storage_path}`);
+              console.error(`  Error details:`, urlError);
+            }
+
+            if (!urlData?.signedUrl) {
+              console.warn(`No signed URL created for photo ${photo.id} at ${photo.storage_path}`);
+            }
+
             return {
               ...photo,
-              photo_url: urlData?.signedUrl,
+              photo_url: urlData?.signedUrl || null,
             };
           }
         )
       );
 
+      // Filter out photos without valid URLs (file might have been deleted from storage)
+      const validPhotos = photosWithUrls.filter((p) => p.photo_url);
+
       return {
         ...disc,
-        photos: photosWithUrls,
+        photos: validPhotos,
       };
     })
   );
