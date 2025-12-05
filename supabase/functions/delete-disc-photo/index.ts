@@ -66,22 +66,34 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Get photo record and verify ownership
-  const { data: photo, error: photoError } = await supabase
-    .from('disc_photos')
-    .select('*, disc:discs(owner_id)')
-    .eq('id', photo_id)
-    .single();
+  // Get photo record
+  const { data: photo, error: photoError } = await supabase.from('disc_photos').select('*').eq('id', photo_id).single();
 
   if (photoError || !photo) {
-    return new Response(JSON.stringify({ error: 'Photo not found' }), {
+    console.error('Photo not found:', photoError);
+    return new Response(JSON.stringify({ error: 'Photo not found', details: photoError?.message }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Get disc to verify ownership
+  const { data: disc, error: discError } = await supabase
+    .from('discs')
+    .select('owner_id')
+    .eq('id', photo.disc_id)
+    .single();
+
+  if (discError || !disc) {
+    console.error('Disc not found:', discError);
+    return new Response(JSON.stringify({ error: 'Disc not found', details: discError?.message }), {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
   // Verify user owns the disc
-  if (photo.disc.owner_id !== user.id) {
+  if (disc.owner_id !== user.id) {
     return new Response(JSON.stringify({ error: 'You do not own this photo' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
