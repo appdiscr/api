@@ -111,8 +111,13 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Create service role client for privileged operations
+  // Authorization has already been verified above (user owns disc)
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
   // Check existing photo count
-  const { count: photoCount, error: countError } = await supabase
+  const { count: photoCount, error: countError } = await supabaseAdmin
     .from('disc_photos')
     .select('*', { count: 'exact', head: true })
     .eq('disc_id', discId);
@@ -142,7 +147,7 @@ Deno.serve(async (req) => {
   // Path: {user_id}/{disc_id}/{uuid}.{extension}
   const storagePath = `${user.id}/${discId}/${photoId}.${extension}`;
 
-  const { error: uploadError } = await supabase.storage.from('disc-photos').upload(storagePath, file, {
+  const { error: uploadError } = await supabaseAdmin.storage.from('disc-photos').upload(storagePath, file, {
     contentType: file.type,
     upsert: true, // Replace if exists
   });
@@ -156,7 +161,7 @@ Deno.serve(async (req) => {
   }
 
   // Create disc_photos record
-  const { data: photoRecord, error: dbError } = await supabase
+  const { data: photoRecord, error: dbError } = await supabaseAdmin
     .from('disc_photos')
     .insert({
       disc_id: discId,
@@ -176,7 +181,7 @@ Deno.serve(async (req) => {
   }
 
   // Get signed URL for the photo
-  const { data: urlData } = await supabase.storage.from('disc-photos').createSignedUrl(storagePath, 3600); // 1 hour expiry
+  const { data: urlData } = await supabaseAdmin.storage.from('disc-photos').createSignedUrl(storagePath, 3600); // 1 hour expiry
 
   return new Response(
     JSON.stringify({
