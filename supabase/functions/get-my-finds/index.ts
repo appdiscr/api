@@ -95,13 +95,25 @@ Deno.serve(async (req) => {
   // Get owner display names and disc photos
   const recoveriesWithDetails = await Promise.all(
     (recoveries || []).map(async (recovery) => {
+      // Extract disc (Supabase returns single object for foreign key relations)
+      const disc = recovery.disc as {
+        id: string;
+        name: string;
+        manufacturer: string;
+        mold: string;
+        plastic: string;
+        color: string;
+        reward_amount: number;
+        owner_id: string;
+      } | null;
+
       // Get owner display name
       let ownerDisplayName = 'Anonymous';
-      if (recovery.disc?.owner_id) {
+      if (disc?.owner_id) {
         const { data: profile } = await supabaseAdmin
           .from('profiles')
           .select('username, full_name, display_preference, email')
-          .eq('id', recovery.disc.owner_id)
+          .eq('id', disc.owner_id)
           .single();
         if (profile) {
           if (profile.display_preference === 'full_name' && profile.full_name) {
@@ -116,11 +128,11 @@ Deno.serve(async (req) => {
 
       // Get first disc photo
       let photoUrl = null;
-      if (recovery.disc?.id) {
+      if (disc?.id) {
         const { data: photos } = await supabaseAdmin
           .from('disc_photos')
           .select('storage_path')
-          .eq('disc_id', recovery.disc.id)
+          .eq('disc_id', disc.id)
           .limit(1);
 
         if (photos && photos.length > 0) {
@@ -139,15 +151,15 @@ Deno.serve(async (req) => {
         meetup_time: recovery.meetup_time,
         created_at: recovery.created_at,
         updated_at: recovery.updated_at,
-        disc: recovery.disc
+        disc: disc
           ? {
-              id: recovery.disc.id,
-              name: recovery.disc.name,
-              manufacturer: recovery.disc.manufacturer,
-              mold: recovery.disc.mold,
-              plastic: recovery.disc.plastic,
-              color: recovery.disc.color,
-              reward_amount: recovery.disc.reward_amount,
+              id: disc.id,
+              name: disc.name,
+              manufacturer: disc.manufacturer,
+              mold: disc.mold,
+              plastic: disc.plastic,
+              color: disc.color,
+              reward_amount: disc.reward_amount,
               owner_display_name: ownerDisplayName,
               photo_url: photoUrl,
             }
