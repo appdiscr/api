@@ -115,9 +115,9 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Check if proposal is already accepted or rejected
-  if (proposal.status !== 'proposed') {
-    return new Response(JSON.stringify({ error: 'This proposal has already been accepted or rejected' }), {
+  // Check if proposal is already accepted or declined
+  if (proposal.status !== 'pending') {
+    return new Response(JSON.stringify({ error: 'This proposal has already been accepted or declined' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -173,11 +173,11 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Update recovery event status to 'meetup_scheduled'
+  // Update recovery event status to 'meetup_confirmed'
   const { error: eventUpdateError } = await supabaseAdmin
     .from('recovery_events')
     .update({
-      status: 'meetup_scheduled',
+      status: 'meetup_confirmed',
       updated_at: new Date().toISOString(),
     })
     .eq('id', proposal.recovery_event_id);
