@@ -124,27 +124,44 @@ Deno.serve(async (req) => {
   }
 
   // Get disc owner from the nested relationship
-  // Supabase returns nested FK relationships as arrays
+  // Supabase returns nested FK relationships differently based on join type
   const recoveryEventData = proposal.recovery_event as unknown as
     | {
         id: string;
         disc_id: string;
         finder_id: string;
         status: string;
-        disc: { owner_id: string }[] | null;
+        disc: { owner_id: string } | { owner_id: string }[] | null;
+      }
+    | {
+        id: string;
+        disc_id: string;
+        finder_id: string;
+        status: string;
+        disc: { owner_id: string } | { owner_id: string }[] | null;
       }[]
     | null;
 
   const recoveryEvent = Array.isArray(recoveryEventData) ? recoveryEventData[0] : recoveryEventData;
 
   if (!recoveryEvent) {
+    console.error('Recovery event not found. Raw data:', JSON.stringify(proposal.recovery_event));
     return new Response(JSON.stringify({ error: 'Recovery event not found' }), {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  const discOwner = recoveryEvent.disc?.[0]?.owner_id;
+  // Handle both array and object responses for disc
+  const discData = recoveryEvent.disc;
+  const disc = Array.isArray(discData) ? discData[0] : discData;
+  const discOwner = disc?.owner_id;
+
+  console.log('Authorization check:', {
+    userId: user.id,
+    discOwner,
+    rawDiscData: JSON.stringify(recoveryEvent.disc),
+  });
 
   // Verify user is the disc owner
   if (discOwner !== user.id) {
@@ -159,7 +176,6 @@ Deno.serve(async (req) => {
     .from('meetup_proposals')
     .update({
       status: 'accepted',
-      updated_at: new Date().toISOString(),
     })
     .eq('id', proposal_id)
     .select()
@@ -201,7 +217,7 @@ Deno.serve(async (req) => {
         proposed_datetime: updatedProposal.proposed_datetime,
         status: updatedProposal.status,
         message: updatedProposal.message,
-        updated_at: updatedProposal.updated_at,
+        created_at: updatedProposal.created_at,
       },
     }),
     {

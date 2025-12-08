@@ -40,14 +40,15 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Fetch user's discs with photos and QR code
+  // Fetch user's discs with photos, QR code, and active recovery events
   const { data: discs, error: discsError } = await supabase
     .from('discs')
     .select(
       `
       *,
       photos:disc_photos(id, storage_path, photo_uuid, created_at),
-      qr_code:qr_codes(id, short_code, status)
+      qr_code:qr_codes(id, short_code, status),
+      active_recovery:recovery_events(id, status, finder_id, found_at)
     `
     )
     .eq('owner_id', user.id)
@@ -61,7 +62,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Generate signed URLs for all photos
+  // Generate signed URLs for all photos and process recovery status
   const discsWithPhotoUrls = await Promise.all(
     (discs || []).map(async (disc) => {
       const photosWithUrls = await Promise.all(
@@ -79,9 +80,21 @@ Deno.serve(async (req) => {
         )
       );
 
+      // Find the most recent active recovery (not recovered or cancelled)
+      const activeRecoveries = (disc.active_recovery || []).filter(
+        (r: { status: string }) => r.status !== 'recovered' && r.status !== 'cancelled'
+      );
+      // Sort by found_at descending and get the first one
+      const activeRecovery =
+        activeRecoveries.sort(
+          (a: { found_at: string }, b: { found_at: string }) =>
+            new Date(b.found_at).getTime() - new Date(a.found_at).getTime()
+        )[0] || null;
+
       return {
         ...disc,
         photos: photosWithUrls,
+        active_recovery: activeRecovery,
       };
     })
   );
