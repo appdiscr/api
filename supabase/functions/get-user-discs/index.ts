@@ -40,6 +40,11 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Create service role client for storage operations
+  // This bypasses storage RLS since we verify ownership via discs table RLS
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
   // Fetch user's discs with photos, QR code, and active recovery events
   const { data: discs, error: discsError } = await supabase
     .from('discs')
@@ -68,7 +73,7 @@ Deno.serve(async (req) => {
       const photosWithUrls = await Promise.all(
         (disc.photos || []).map(
           async (photo: { id: string; storage_path: string; photo_uuid: string; created_at: string }) => {
-            const { data: urlData } = await supabase.storage
+            const { data: urlData } = await supabaseAdmin.storage
               .from('disc-photos')
               .createSignedUrl(photo.storage_path, 3600); // 1 hour expiry
 
