@@ -9,7 +9,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
  *
  * POST /dismiss-notification
  * Body: {
- *   notification_id: string   // ID of notification to dismiss
+ *   notification_id: string   // ID of notification to dismiss (optional if dismiss_all is true)
+ *   dismiss_all: boolean      // If true, dismisses all notifications for the user
  * }
  */
 
@@ -42,11 +43,11 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { notification_id } = body;
+  const { notification_id, dismiss_all } = body;
 
-  // Validate notification_id is provided
-  if (!notification_id) {
-    return new Response(JSON.stringify({ error: 'notification_id is required' }), {
+  // Validate either notification_id or dismiss_all is provided
+  if (!notification_id && !dismiss_all) {
+    return new Response(JSON.stringify({ error: 'notification_id or dismiss_all is required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -74,7 +75,36 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Dismiss the notification (mark it as read and dismissed)
+  // Handle dismiss_all case
+  if (dismiss_all) {
+    const { data: notifications, error: updateError } = await supabase
+      .from('notifications')
+      .update({ dismissed: true, read: true })
+      .eq('user_id', user.id)
+      .eq('dismissed', false) // Only dismiss non-dismissed notifications
+      .select('id');
+
+    if (updateError) {
+      console.error('Failed to dismiss all notifications:', updateError);
+      return new Response(JSON.stringify({ error: 'Failed to dismiss notifications', details: updateError.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        dismissed_count: notifications?.length || 0,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  // Dismiss single notification (mark it as read and dismissed)
   // RLS ensures user can only update their own notifications
   const { data: notification, error: updateError } = await supabase
     .from('notifications')
