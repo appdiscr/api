@@ -124,7 +124,10 @@ Deno.serve(async (req) => {
   }
 
   // Check if user is a participant (owner or finder)
-  const discOwner = (recoveryEvent.disc as { owner_id: string }[] | null)?.[0]?.owner_id;
+  // Handle both array and object responses for disc relation
+  const discData = recoveryEvent.disc as { owner_id: string } | { owner_id: string }[] | null;
+  const disc = Array.isArray(discData) ? discData[0] : discData;
+  const discOwner = disc?.owner_id;
   const isOwner = discOwner === user.id;
   const isFinder = recoveryEvent.finder_id === user.id;
 
