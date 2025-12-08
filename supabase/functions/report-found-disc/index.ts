@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { sendPushNotification } from '../_shared/push-notifications.ts';
 
 /**
  * Report Found Disc Function
@@ -166,6 +167,46 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+
+  // Get finder's display name for notification
+  const { data: finderProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id)
+    .single();
+
+  const finderName = finderProfile?.display_name || 'Someone';
+
+  const notificationTitle = 'Your disc was found!';
+  const notificationBody = `${finderName} found your ${disc.name}`;
+  const notificationData = {
+    recovery_event_id: recoveryEvent.id,
+    disc_id: disc.id,
+    finder_id: user.id,
+  };
+
+  // Create in-app notification for disc owner
+  try {
+    await supabaseAdmin.from('notifications').insert({
+      user_id: disc.owner_id,
+      type: 'disc_found',
+      title: notificationTitle,
+      body: notificationBody,
+      data: notificationData,
+    });
+  } catch (notificationError) {
+    console.error('Failed to create notification:', notificationError);
+    // Don't fail the request, the recovery was created successfully
+  }
+
+  // Send push notification
+  await sendPushNotification({
+    userId: disc.owner_id,
+    title: notificationTitle,
+    body: notificationBody,
+    data: notificationData,
+    supabaseAdmin,
+  });
 
   // Return the created recovery event
   return new Response(

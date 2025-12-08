@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { sendPushNotification } from '../_shared/push-notifications.ts';
 
 /**
  * Propose Meetup Function
@@ -166,6 +167,54 @@ Deno.serve(async (req) => {
   if (updateError) {
     console.error('Failed to update recovery event status:', updateError);
     // Don't fail the request, the proposal was created successfully
+  }
+
+  // Get proposer's display name and disc info for notification
+  const { data: proposerProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id)
+    .single();
+
+  const { data: discInfo } = await supabaseAdmin.from('discs').select('name').eq('id', recoveryEvent.disc_id).single();
+
+  const proposerName = proposerProfile?.display_name || 'Someone';
+  const discName = discInfo?.name || 'your disc';
+
+  // Determine recipient: if proposer is owner, notify finder; if proposer is finder, notify owner
+  const recipientId = isOwner ? recoveryEvent.finder_id : discOwner;
+
+  const notificationTitle = 'New meetup proposal';
+  const notificationBodyText = `${proposerName} proposed a meetup for ${discName}`;
+  const notificationData = {
+    recovery_event_id,
+    proposal_id: proposal.id,
+    disc_id: recoveryEvent.disc_id,
+  };
+
+  // Create notification for the other party
+  if (recipientId) {
+    try {
+      await supabaseAdmin.from('notifications').insert({
+        user_id: recipientId,
+        type: 'meetup_proposed',
+        title: notificationTitle,
+        body: notificationBodyText,
+        data: notificationData,
+      });
+    } catch (notificationError) {
+      console.error('Failed to create notification:', notificationError);
+      // Don't fail the request, the proposal was created successfully
+    }
+
+    // Send push notification
+    await sendPushNotification({
+      userId: recipientId,
+      title: notificationTitle,
+      body: notificationBodyText,
+      data: notificationData,
+      supabaseAdmin,
+    });
   }
 
   // Return the created proposal
