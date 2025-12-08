@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
     .from('notifications')
     .select('*')
     .eq('user_id', user.id)
+    .eq('dismissed', false)
     .order('created_at', { ascending: false });
 
   // Filter by unread if requested
