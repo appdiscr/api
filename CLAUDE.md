@@ -83,14 +83,22 @@ supabase functions deploy function_name
 
 ## Git Workflow
 
+**CRITICAL:** All changes MUST go through Pull Requests. Never commit directly
+to main.
+
 1. **Create feature branch:** `git checkout -b feature/description`
 1. **Make changes** to migrations or functions
+1. **Write markdown correctly the FIRST time** - Use markdownlint style:
+   - Keep lines under 80 characters (break long lines manually)
+   - Use `1.` for all ordered list items (auto-numbered)
+   - Add blank lines around fenced code blocks
+   - Do NOT rely on pre-commit hooks to fix formatting
 1. **ALWAYS run pre-commit BEFORE committing:** `pre-commit run --all-files`
-   - Fix ALL errors (especially markdown and YAML formatting)
+   - Fix ALL errors before committing
    - Do NOT commit with `--no-verify` unless absolutely necessary
 1. **Commit with conventional format:** `git commit -m "type: description"`
 1. **Push and create PR:** `gh pr create --title "feat: description"`
-1. **Merge to main:** Automatic release created based on commits
+1. **Get PR reviewed and merged** - Never push directly to main
 
 **Commit Format:** Conventional Commits (enforced by pre-commit hook)
 
