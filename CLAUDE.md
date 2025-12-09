@@ -65,11 +65,11 @@ supabase link --project-ref xhaogdigrsiwxdjmjzgx
 # Create new migration
 supabase migration new migration_name
 
-# Apply migrations locally
+# Apply migrations locally (requires local Supabase)
 supabase db reset
 
-# Push migrations to production
-supabase db push
+# NOTE: Do NOT run 'supabase db push' locally!
+# Migrations are pushed via CI/CD on PR merge
 
 # Create new edge function
 supabase functions new function_name
@@ -77,8 +77,8 @@ supabase functions new function_name
 # Serve functions locally
 supabase functions serve
 
-# Deploy functions
-supabase functions deploy function_name
+# Deploy functions (done via CI/CD on PR merge)
+# supabase functions deploy function_name
 ```
 
 ## Git Workflow
@@ -159,8 +159,10 @@ pre-commit autoupdate           # Update hook versions
 
 - Always create migrations for schema changes
 - Never modify existing migrations after they're merged
-- Test migrations locally before pushing
 - Use descriptive migration names
+- **NEVER run `supabase db push` locally** - Migrations are pushed to production
+  automatically via CI/CD when PRs are merged to main
+- To test migrations locally, use `supabase db reset` (requires local Supabase)
 
 ### Edge Functions
 
