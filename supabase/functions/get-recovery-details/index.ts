@@ -201,6 +201,29 @@ Deno.serve(async (req) => {
     .eq('recovery_event_id', recoveryId)
     .single();
 
+  // Generate signed URL for drop-off photo if it exists
+  let dropOffWithSignedUrl = dropOff;
+  if (dropOff?.photo_url) {
+    // Extract storage path from the public URL or use it directly if it's a path
+    const photoUrl = dropOff.photo_url;
+    // Check if it's a full URL containing the storage path
+    const pathMatch = photoUrl.match(/\/storage\/v1\/object\/public\/disc-photos\/(.+)/);
+    const storagePath = pathMatch ? pathMatch[1] : photoUrl.replace(/^.*disc-photos\//, '');
+
+    if (storagePath && !storagePath.startsWith('http')) {
+      const { data: signedUrlData } = await supabaseAdmin.storage
+        .from('disc-photos')
+        .createSignedUrl(storagePath, 3600);
+
+      if (signedUrlData?.signedUrl) {
+        dropOffWithSignedUrl = {
+          ...dropOff,
+          photo_url: signedUrlData.signedUrl,
+        };
+      }
+    }
+  }
+
   return new Response(
     JSON.stringify({
       id: recovery.id,
@@ -234,7 +257,7 @@ Deno.serve(async (req) => {
         avatar_url: finderAvatarUrl,
       },
       meetup_proposals: proposals || [],
-      drop_off: dropOff || null,
+      drop_off: dropOffWithSignedUrl || null,
     }),
     {
       status: 200,
