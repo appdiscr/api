@@ -18,12 +18,22 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
  * - is_claimable: boolean (if disc has no owner and can be claimed)
  */
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 Deno.serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   // Only allow GET requests
   if (req.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -34,7 +44,7 @@ Deno.serve(async (req) => {
   if (!code) {
     return new Response(JSON.stringify({ error: 'Missing code parameter' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -68,7 +78,7 @@ Deno.serve(async (req) => {
   if (qrError || !qrCode) {
     return new Response(JSON.stringify({ found: false }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -76,7 +86,7 @@ Deno.serve(async (req) => {
   if (qrCode.status !== 'assigned' && qrCode.status !== 'active') {
     return new Response(JSON.stringify({ found: false }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -128,7 +138,7 @@ Deno.serve(async (req) => {
   if (discError || !disc) {
     return new Response(JSON.stringify({ found: false }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -174,7 +184,7 @@ Deno.serve(async (req) => {
     }),
     {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     }
   );
 });
