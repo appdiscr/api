@@ -1,9 +1,9 @@
 import { assertEquals } from 'https://deno.land/std@0.192.0/testing/asserts.ts';
 import { generateShortCode, generateShortCodes } from './short-code.ts';
 
-Deno.test('generateShortCode: should generate 8 character code', () => {
+Deno.test('generateShortCode: should generate 12 character code', () => {
   const code = generateShortCode();
-  assertEquals(code.length, 8);
+  assertEquals(code.length, 12);
 });
 
 Deno.test('generateShortCode: should only contain valid characters', () => {
@@ -52,7 +52,7 @@ Deno.test('generateShortCodes: should generate all unique codes', () => {
 Deno.test('generateShortCodes: should handle single code request', () => {
   const codes = generateShortCodes(1);
   assertEquals(codes.length, 1);
-  assertEquals(codes[0].length, 8);
+  assertEquals(codes[0].length, 12);
 });
 
 Deno.test('generateShortCodes: should handle large batch request', () => {

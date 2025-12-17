@@ -7,11 +7,11 @@
 
 // Alphabet excluding ambiguous characters
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const CODE_LENGTH = 8;
+const CODE_LENGTH = 12;
 
 /**
  * Generate a random short code
- * @returns A random 8-character alphanumeric string
+ * @returns A random 12-character alphanumeric string
  */
 export function generateShortCode(): string {
   let result = '';

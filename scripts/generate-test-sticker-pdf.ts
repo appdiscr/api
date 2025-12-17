@@ -24,29 +24,29 @@ const STICKERS_PER_COL = 5;
 // App URL for QR codes
 const APP_URL = 'https://aceback.app/d';
 
-// Test short codes
+// Test short codes (12 characters)
 const TEST_CODES = [
-  'ABCD1234',
-  'EFGH5678',
-  'JKLM9ABC',
-  'NPQR2DEF',
-  'STUV3GHJ',
-  'WXYZ4KLM',
-  'TEST1ABC',
-  'DEMO2DEF',
-  'SAMP3GHJ',
-  'PRNT4KLM',
+  'ABCD1234EFGH',
+  'JKLM5678NPQR',
+  'STUV9ABCWXYZ',
+  'TEST2DEFDEMO',
+  'SAMP3GHJPRNT',
+  'CODE4KLMDISC',
+  'BACK5NPQFIND',
+  'SCAN6RSTLINK',
+  'QRCD7UVWSTKR',
+  'ACES8XYZGOLF',
   // Add more for a full page
-  'CODE5NPQ',
-  'DISC6RST',
-  'BACK7UVW',
-  'FIND8XYZ',
-  'SCAN9ABC',
-  'LINK0DEF',
-  'QRCD1GHJ',
-  'STKR2KLM',
-  'ACES3NPQ',
-  'GOLF4RST',
+  'FRWY9ABCPUTT',
+  'DRVE2DEFCHIP',
+  'HYZE3GHJMAKO',
+  'BERG4KLMZONE',
+  'REKO5NPQPURE',
+  'ENVY6RSTPOLT',
+  'VOLT7UVWWAVE',
+  'HEAT8XYZNUKE',
+  'CRAV9ABCBUZZ',
+  'LUNA2DEFATOM',
 ];
 
 async function generateTestPdf() {
