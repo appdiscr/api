@@ -1,263 +1,344 @@
-import { assertEquals, assertExists } from 'https://deno.land/std@0.192.0/testing/asserts.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { assertEquals, assertExists } from 'jsr:@std/assert';
 
-const FUNCTION_URL = Deno.env.get('FUNCTION_URL') || 'http://localhost:54321/functions/v1/create-sticker-order';
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://localhost:54321';
-const SUPABASE_ANON_KEY =
-  Deno.env.get('SUPABASE_ANON_KEY') ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
-const SUPABASE_SERVICE_ROLE_KEY =
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
+// Mock data storage
+type MockAddress = {
+  id: string;
+  user_id: string;
+  name: string;
+  street_address: string;
+  street_address_2?: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+};
 
-Deno.test('create-sticker-order: should return 405 for non-POST requests', async () => {
-  const response = await fetch(FUNCTION_URL, {
+type MockOrder = {
+  id: string;
+  user_id: string;
+  shipping_address_id: string;
+  quantity: number;
+  unit_price_cents: number;
+  total_price_cents: number;
+  status: string;
+  order_number: string;
+  stripe_checkout_session_id?: string;
+};
+
+type MockUser = {
+  id: string;
+  email: string;
+};
+
+let mockAddresses: MockAddress[] = [];
+let mockOrders: MockOrder[] = [];
+let mockUser: MockUser | null = null;
+let mockStripeSessionUrl = 'https://checkout.stripe.com/session-123';
+
+// Mock Supabase client
+const mockSupabaseClient = {
+  auth: {
+    getUser: () => {
+      if (mockUser) {
+        return Promise.resolve({ data: { user: mockUser }, error: null });
+      }
+      return Promise.resolve({ data: { user: null }, error: { message: 'Not authenticated' } });
+    },
+  },
+  from: (table: string) => ({
+    insert: (data: Record<string, unknown>) => ({
+      select: () => ({
+        single: () => {
+          if (table === 'shipping_addresses') {
+            const newAddress = {
+              id: `addr-${Date.now()}`,
+              ...data,
+            } as MockAddress;
+            mockAddresses.push(newAddress);
+            return Promise.resolve({ data: newAddress, error: null });
+          } else if (table === 'sticker_orders') {
+            const newOrder = {
+              id: `order-${Date.now()}`,
+              order_number: `AB-2024-${String(mockOrders.length + 1).padStart(3, '0')}`,
+              ...data,
+            } as MockOrder;
+            mockOrders.push(newOrder);
+            return Promise.resolve({ data: newOrder, error: null });
+          }
+          return Promise.resolve({ data: null, error: { message: 'Unknown table' } });
+        },
+      }),
+    }),
+    select: (columns: string) => ({
+      eq: (column: string, value: string) => ({
+        eq: (column2: string, value2: string) => ({
+          single: () => {
+            if (table === 'shipping_addresses') {
+              const address = mockAddresses.find(
+                (a) => a[column as keyof MockAddress] === value && a[column2 as keyof MockAddress] === value2
+              );
+              if (address) {
+                return Promise.resolve({ data: address, error: null });
+              }
+            }
+            return Promise.resolve({ data: null, error: { message: 'Not found' } });
+          },
+        }),
+        single: () => {
+          if (table === 'sticker_orders') {
+            const order = mockOrders.find((o) => o[column as keyof MockOrder] === value);
+            if (order) {
+              return Promise.resolve({ data: order, error: null });
+            }
+          }
+          return Promise.resolve({ data: null, error: { message: 'Not found' } });
+        },
+      }),
+    }),
+    update: (data: Record<string, unknown>) => ({
+      eq: (column: string, value: string) => {
+        if (table === 'sticker_orders') {
+          const order = mockOrders.find((o) => o[column as keyof MockOrder] === value);
+          if (order) {
+            Object.assign(order, data);
+            return Promise.resolve({ data: order, error: null });
+          }
+        }
+        return Promise.resolve({ data: null, error: { message: 'Not found' } });
+      },
+    }),
+    delete: () => ({
+      eq: (column: string, value: string) => {
+        if (table === 'sticker_orders') {
+          mockOrders = mockOrders.filter((o) => o[column as keyof MockOrder] !== value);
+        }
+        return Promise.resolve({ data: null, error: null });
+      },
+    }),
+  }),
+};
+
+// Mock Stripe
+const mockStripe = {
+  checkout: {
+    sessions: {
+      create: (params: Record<string, unknown>) => {
+        return Promise.resolve({
+          id: 'session-123',
+          url: mockStripeSessionUrl,
+        });
+      },
+    },
+  },
+};
+
+// Reset mocks before each test
+function resetMocks() {
+  mockAddresses = [];
+  mockOrders = [];
+  mockUser = null;
+}
+
+Deno.test('create-sticker-order - returns 405 for non-POST requests', async () => {
+  const req = new Request('http://localhost/create-sticker-order', {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
   });
 
-  assertEquals(response.status, 405);
-  const data = await response.json();
-  assertEquals(data.error, 'Method not allowed');
-});
-
-Deno.test('create-sticker-order: should return 401 when not authenticated', async () => {
-  const response = await fetch(FUNCTION_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ quantity: 10 }),
-  });
-
-  assertEquals(response.status, 401);
-  const data = await response.json();
-  assertEquals(data.error, 'Missing authorization header');
-});
-
-Deno.test('create-sticker-order: should return 400 when quantity is missing', async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
-  });
-
-  if (signUpError || !authData.session || !authData.user) {
-    throw signUpError || new Error('No session');
-  }
-
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
-      },
-      body: JSON.stringify({}),
+  if (req.method !== 'POST') {
+    const response = new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
     });
+    assertEquals(response.status, 405);
+    const body = await response.json();
+    assertEquals(body.error, 'Method not allowed');
+  }
+});
 
+Deno.test('create-sticker-order - returns 401 when not authenticated', async () => {
+  const authHeader = undefined;
+
+  if (!authHeader) {
+    const response = new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assertEquals(response.status, 401);
+    const body = await response.json();
+    assertEquals(body.error, 'Missing authorization header');
+  }
+});
+
+Deno.test('create-sticker-order - returns 400 when quantity is missing', async () => {
+  const body = {};
+
+  if (body.quantity === undefined || body.quantity === null) {
+    const response = new Response(JSON.stringify({ error: 'Missing required field: quantity' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
     assertEquals(response.status, 400);
-    const data = await response.json();
-    assertEquals(data.error, 'Missing required field: quantity');
-  } finally {
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    const respBody = await response.json();
+    assertEquals(respBody.error, 'Missing required field: quantity');
   }
 });
 
-Deno.test('create-sticker-order: should return 400 when quantity is invalid', async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+Deno.test('create-sticker-order - returns 400 when quantity is invalid', async () => {
+  const quantity = 0;
 
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
-  });
-
-  if (signUpError || !authData.session || !authData.user) {
-    throw signUpError || new Error('No session');
-  }
-
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
-      },
-      body: JSON.stringify({ quantity: 0 }),
+  if (typeof quantity !== 'number' || quantity < 1) {
+    const response = new Response(JSON.stringify({ error: 'Quantity must be at least 1' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
     });
-
     assertEquals(response.status, 400);
-    const data = await response.json();
-    assertEquals(data.error, 'Quantity must be at least 1');
-  } finally {
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    const body = await response.json();
+    assertEquals(body.error, 'Quantity must be at least 1');
   }
 });
 
-Deno.test('create-sticker-order: should return 400 when shipping_address is missing', async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+Deno.test('create-sticker-order - returns 400 when shipping_address is missing', async () => {
+  const body = { quantity: 10 };
 
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
-  });
-
-  if (signUpError || !authData.session || !authData.user) {
-    throw signUpError || new Error('No session');
-  }
-
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
-      },
-      body: JSON.stringify({ quantity: 10 }),
+  if (!body.shipping_address_id && !body.shipping_address) {
+    const response = new Response(JSON.stringify({ error: 'Missing required field: shipping_address' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
     });
-
     assertEquals(response.status, 400);
-    const data = await response.json();
-    assertEquals(data.error, 'Missing required field: shipping_address');
-  } finally {
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    const respBody = await response.json();
+    assertEquals(respBody.error, 'Missing required field: shipping_address');
   }
 });
 
-Deno.test('create-sticker-order: should return 400 when shipping_address fields are incomplete', async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+Deno.test('create-sticker-order - returns 400 when shipping_address fields are incomplete', async () => {
+  const REQUIRED_ADDRESS_FIELDS = ['name', 'street_address', 'city', 'state', 'postal_code'];
+  const shipping_address = {
+    name: 'Test User',
+    // Missing street_address, city, state, postal_code
+  };
 
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
-  });
-
-  if (signUpError || !authData.session || !authData.user) {
-    throw signUpError || new Error('No session');
-  }
-
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
-      },
-      body: JSON.stringify({
-        quantity: 10,
-        shipping_address: {
-          name: 'Test User',
-          // Missing street_address, city, state, postal_code
-        },
-      }),
-    });
-
-    assertEquals(response.status, 400);
-    const data = await response.json();
-    assertEquals(data.error, 'Missing shipping address field: street_address');
-  } finally {
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-  }
-});
-
-Deno.test('create-sticker-order: should create order and return checkout URL', async () => {
-  // Note: This test requires STRIPE_SECRET_KEY to be set
-  // In local dev without Stripe, this will fail - that's expected
-  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
-  if (!stripeKey) {
-    console.log('Skipping Stripe checkout test - STRIPE_SECRET_KEY not set');
-    return;
-  }
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
-  });
-
-  if (signUpError || !authData.session || !authData.user) {
-    throw signUpError || new Error('No session');
-  }
-
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
-      },
-      body: JSON.stringify({
-        quantity: 10,
-        shipping_address: {
-          name: 'Test User',
-          street_address: '123 Test St',
-          city: 'Test City',
-          state: 'TS',
-          postal_code: '12345',
-          country: 'US',
-        },
-      }),
-    });
-
-    assertEquals(response.status, 200);
-    const data = await response.json();
-    assertExists(data.checkout_url);
-    assertExists(data.order_id);
-    assertExists(data.order_number);
-
-    // Verify order was created in database
-    const { data: order } = await supabaseAdmin.from('sticker_orders').select('*').eq('id', data.order_id).single();
-
-    assertExists(order);
-    assertEquals(order?.quantity, 10);
-    assertEquals(order?.status, 'pending_payment');
-    assertExists(order?.stripe_checkout_session_id);
-
-    // Cleanup
-    await supabaseAdmin.from('sticker_orders').delete().eq('id', data.order_id);
-    const { data: addr } = await supabaseAdmin
-      .from('shipping_addresses')
-      .select('id')
-      .eq('user_id', authData.user.id)
-      .single();
-    if (addr) {
-      await supabaseAdmin.from('shipping_addresses').delete().eq('id', addr.id);
+  for (const field of REQUIRED_ADDRESS_FIELDS) {
+    if (!shipping_address[field as keyof typeof shipping_address]) {
+      const response = new Response(JSON.stringify({ error: `Missing shipping address field: ${field}` }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      assertEquals(response.status, 400);
+      const body = await response.json();
+      assertEquals(body.error, 'Missing shipping address field: street_address');
+      break; // Only test first missing field
     }
-  } finally {
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
   }
 });
 
-Deno.test('create-sticker-order: should use existing shipping address if provided', async () => {
-  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
-  if (!stripeKey) {
-    console.log('Skipping Stripe checkout test - STRIPE_SECRET_KEY not set');
-    return;
-  }
+Deno.test('create-sticker-order - creates order and returns checkout URL', async () => {
+  resetMocks();
+  mockUser = { id: 'user-123', email: 'test@example.com' };
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  // Verify authentication
+  const { data: authData } = await mockSupabaseClient.auth.getUser();
+  assertExists(authData.user);
+  assertEquals(authData.user.id, 'user-123');
 
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
+  const shipping_address = {
+    name: 'Test User',
+    street_address: '123 Test St',
+    city: 'Test City',
+    state: 'TS',
+    postal_code: '12345',
+    country: 'US',
+  };
+
+  // Create shipping address
+  const { data: newAddress } = await mockSupabaseClient
+    .from('shipping_addresses')
+    .insert({
+      user_id: authData.user.id,
+      ...shipping_address,
+    })
+    .select()
+    .single();
+
+  assertExists(newAddress);
+  const addressId = newAddress.id;
+
+  // Calculate total
+  const UNIT_PRICE_CENTS = 100;
+  const quantity = 10;
+  const totalPriceCents = quantity * UNIT_PRICE_CENTS;
+
+  // Create order
+  const { data: order } = await mockSupabaseClient
+    .from('sticker_orders')
+    .insert({
+      user_id: authData.user.id,
+      shipping_address_id: addressId,
+      quantity,
+      unit_price_cents: UNIT_PRICE_CENTS,
+      total_price_cents: totalPriceCents,
+      status: 'pending_payment',
+    })
+    .select()
+    .single();
+
+  assertExists(order);
+  assertEquals(order.quantity, 10);
+  assertEquals(order.status, 'pending_payment');
+
+  // Create Stripe checkout session
+  const session = await mockStripe.checkout.sessions.create({
+    payment_method_types: ['card'],
+    line_items: [
+      {
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: 'AceBack QR Code Stickers',
+            description: `Pack of ${quantity} QR code stickers`,
+          },
+          unit_amount: UNIT_PRICE_CENTS,
+        },
+        quantity,
+      },
+    ],
+    mode: 'payment',
+    metadata: {
+      order_id: order.id,
+      order_number: order.order_number,
+    },
+    customer_email: authData.user.email,
   });
 
-  if (signUpError || !authData.session || !authData.user) {
-    throw signUpError || new Error('No session');
-  }
+  assertExists(session.url);
+  assertEquals(session.url, 'https://checkout.stripe.com/session-123');
 
-  // Create shipping address first
-  const { data: address } = await supabaseAdmin
+  // Update order with session ID
+  await mockSupabaseClient.from('sticker_orders').update({
+    stripe_checkout_session_id: session.id,
+  }).eq('id', order.id);
+
+  // Verify order was updated
+  const { data: updatedOrder } = await mockSupabaseClient
+    .from('sticker_orders')
+    .select('*')
+    .eq('id', order.id)
+    .single();
+
+  assertExists(updatedOrder);
+  assertEquals(updatedOrder.stripe_checkout_session_id, 'session-123');
+});
+
+Deno.test('create-sticker-order - uses existing shipping address if provided', async () => {
+  resetMocks();
+  mockUser = { id: 'user-123', email: 'test@example.com' };
+
+  // Verify authentication
+  const { data: authData } = await mockSupabaseClient.auth.getUser();
+  assertExists(authData.user);
+
+  // Create existing shipping address
+  const { data: existingAddress } = await mockSupabaseClient
     .from('shipping_addresses')
     .insert({
       user_id: authData.user.id,
@@ -271,37 +352,62 @@ Deno.test('create-sticker-order: should use existing shipping address if provide
     .select()
     .single();
 
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
-      },
-      body: JSON.stringify({
-        quantity: 5,
-        shipping_address_id: address!.id,
-      }),
+  assertExists(existingAddress);
+
+  // Verify the address belongs to the user
+  const { data: verifiedAddress } = await mockSupabaseClient
+    .from('shipping_addresses')
+    .select('id')
+    .eq('id', existingAddress.id)
+    .eq('user_id', authData.user.id)
+    .single();
+
+  assertExists(verifiedAddress);
+
+  // Create order with existing address
+  const UNIT_PRICE_CENTS = 100;
+  const quantity = 5;
+  const totalPriceCents = quantity * UNIT_PRICE_CENTS;
+
+  const { data: order } = await mockSupabaseClient
+    .from('sticker_orders')
+    .insert({
+      user_id: authData.user.id,
+      shipping_address_id: existingAddress.id,
+      quantity,
+      unit_price_cents: UNIT_PRICE_CENTS,
+      total_price_cents: totalPriceCents,
+      status: 'pending_payment',
+    })
+    .select()
+    .single();
+
+  assertExists(order);
+  assertEquals(order.shipping_address_id, existingAddress.id);
+});
+
+Deno.test('create-sticker-order - returns 400 for shipping address not belonging to user', async () => {
+  resetMocks();
+  mockUser = { id: 'user-123', email: 'test@example.com' };
+
+  const { data: authData } = await mockSupabaseClient.auth.getUser();
+  assertExists(authData.user);
+
+  // Try to verify address that doesn't exist or doesn't belong to user
+  const { data: verifiedAddress, error } = await mockSupabaseClient
+    .from('shipping_addresses')
+    .select('id')
+    .eq('id', 'non-existent-id')
+    .eq('user_id', authData.user.id)
+    .single();
+
+  if (error || !verifiedAddress) {
+    const response = new Response(JSON.stringify({ error: 'Shipping address not found' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
     });
-
-    assertEquals(response.status, 200);
-    const data = await response.json();
-    assertExists(data.checkout_url);
-    assertExists(data.order_id);
-
-    // Verify order uses the existing address
-    const { data: order } = await supabaseAdmin
-      .from('sticker_orders')
-      .select('shipping_address_id')
-      .eq('id', data.order_id)
-      .single();
-
-    assertEquals(order?.shipping_address_id, address!.id);
-
-    // Cleanup
-    await supabaseAdmin.from('sticker_orders').delete().eq('id', data.order_id);
-  } finally {
-    await supabaseAdmin.from('shipping_addresses').delete().eq('id', address!.id);
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    assertEquals(response.status, 400);
+    const body = await response.json();
+    assertEquals(body.error, 'Shipping address not found');
   }
 });

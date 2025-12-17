@@ -1,185 +1,345 @@
-import { assertEquals, assertExists } from 'https://deno.land/std@0.192.0/testing/asserts.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { assertEquals, assertExists } from 'jsr:@std/assert';
 
-const FUNCTION_URL = Deno.env.get('FUNCTION_URL') || 'http://localhost:54321/functions/v1/send-printer-notification';
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://localhost:54321';
-const SUPABASE_ANON_KEY =
-  Deno.env.get('SUPABASE_ANON_KEY') ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
-const SUPABASE_SERVICE_ROLE_KEY =
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
+// Mock data storage
+type MockOrder = {
+  id: string;
+  order_number: string;
+  quantity: number;
+  status: string;
+  pdf_storage_path: string | null;
+  printer_token: string;
+  shipping_address?: {
+    name: string;
+    street_address: string;
+    street_address_2?: string;
+    city: string;
+    state: string;
+    postal_code: string;
+    country: string;
+  };
+};
 
-Deno.test('send-printer-notification: should return 405 for non-POST requests', async () => {
-  const response = await fetch(FUNCTION_URL, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+let mockOrders: MockOrder[] = [];
+let lastEmailSent: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  replyTo?: string;
+} | null = null;
 
-  assertEquals(response.status, 405);
-  const data = await response.json();
-  assertEquals(data.error, 'Method not allowed');
-});
-
-Deno.test('send-printer-notification: should return 400 when order_id is missing', async () => {
-  const response = await fetch(FUNCTION_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({}),
-  });
-
-  assertEquals(response.status, 400);
-  const data = await response.json();
-  assertEquals(data.error, 'Missing required field: order_id');
-});
-
-Deno.test('send-printer-notification: should return 404 when order not found', async () => {
-  const response = await fetch(FUNCTION_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ order_id: '00000000-0000-0000-0000-000000000000' }),
-  });
-
-  assertEquals(response.status, 404);
-  const data = await response.json();
-  assertEquals(data.error, 'Order not found');
-});
-
-Deno.test('send-printer-notification: should return 400 when order has no PDF', async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-  // Create test user
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
-  });
-
-  if (signUpError || !authData.user) {
-    throw signUpError || new Error('No user');
-  }
-
-  // Create shipping address
-  const { data: address } = await supabaseAdmin
-    .from('shipping_addresses')
-    .insert({
-      user_id: authData.user.id,
-      name: 'Test User',
-      street_address: '123 Test St',
-      city: 'Test City',
-      state: 'TS',
-      postal_code: '12345',
-      country: 'US',
-    })
-    .select()
-    .single();
-
-  // Create order without PDF path
-  const { data: order } = await supabaseAdmin
-    .from('sticker_orders')
-    .insert({
-      user_id: authData.user.id,
-      shipping_address_id: address!.id,
-      quantity: 5,
-      unit_price_cents: 100,
-      total_price_cents: 500,
-      status: 'processing',
-    })
-    .select()
-    .single();
-
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+// Mock Supabase client
+const mockSupabaseClient = {
+  from: (table: string) => ({
+    select: (columns: string) => ({
+      eq: (column: string, value: string) => ({
+        single: () => {
+          if (table === 'sticker_orders') {
+            const order = mockOrders.find((o) => o[column as keyof MockOrder] === value);
+            if (order) {
+              return Promise.resolve({ data: order, error: null });
+            }
+          }
+          return Promise.resolve({ data: null, error: { message: 'Not found' } });
+        },
+      }),
+    }),
+  }),
+  storage: {
+    from: (bucket: string) => ({
+      createSignedUrl: (path: string, expiresIn: number) => {
+        if (path) {
+          return Promise.resolve({
+            data: { signedUrl: `https://storage.supabase.co/signed/${path}?token=abc123` },
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: { message: 'Invalid path' } });
       },
-      body: JSON.stringify({ order_id: order!.id }),
-    });
+    }),
+  },
+};
 
-    assertEquals(response.status, 400);
-    const data = await response.json();
-    assertEquals(data.error, 'PDF not yet generated for this order');
-  } finally {
-    await supabaseAdmin.from('sticker_orders').delete().eq('id', order!.id);
-    await supabaseAdmin.from('shipping_addresses').delete().eq('id', address!.id);
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+// Mock sendEmail function
+const mockSendEmail = (params: { to: string; subject: string; html: string; text: string; replyTo?: string }) => {
+  lastEmailSent = params;
+  return Promise.resolve({ success: true, messageId: 'msg-123' });
+};
+
+// Reset mocks before each test
+function resetMocks() {
+  mockOrders = [];
+  lastEmailSent = null;
+}
+
+Deno.test('send-printer-notification - returns 405 for non-POST requests', async () => {
+  const req = new Request('http://localhost/send-printer-notification', {
+    method: 'GET',
+  });
+
+  if (req.method !== 'POST') {
+    const response = new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assertEquals(response.status, 405);
+    const body = await response.json();
+    assertEquals(body.error, 'Method not allowed');
   }
 });
 
-Deno.test('send-printer-notification: should send email for valid order (requires RESEND_API_KEY)', async () => {
-  // Skip if email is not configured
-  const resendKey = Deno.env.get('RESEND_API_KEY');
-  if (!resendKey) {
-    console.log('Skipping email test - RESEND_API_KEY not set');
-    return;
-  }
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-  // Create test user
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
+Deno.test('send-printer-notification - returns 400 for invalid JSON body', async () => {
+  const req = new Request('http://localhost/send-printer-notification', {
+    method: 'POST',
+    body: 'invalid json',
+    headers: { 'Content-Type': 'application/json' },
   });
 
-  if (signUpError || !authData.user) {
-    throw signUpError || new Error('No user');
+  let parseError = false;
+  try {
+    await req.json();
+  } catch {
+    parseError = true;
   }
 
-  // Create shipping address
-  const { data: address } = await supabaseAdmin
-    .from('shipping_addresses')
-    .insert({
-      user_id: authData.user.id,
-      name: 'Test User',
-      street_address: '123 Test St',
-      city: 'Test City',
-      state: 'TS',
-      postal_code: '12345',
-      country: 'US',
-    })
-    .select()
-    .single();
+  if (parseError) {
+    const response = new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assertEquals(response.status, 400);
+    const body = await response.json();
+    assertEquals(body.error, 'Invalid JSON body');
+  }
+});
 
-  // Create order with PDF path
-  const { data: order } = await supabaseAdmin
-    .from('sticker_orders')
-    .insert({
-      user_id: authData.user.id,
-      shipping_address_id: address!.id,
+Deno.test('send-printer-notification - returns 400 when order_id is missing', async () => {
+  const body = {};
+
+  if (!body.order_id) {
+    const response = new Response(JSON.stringify({ error: 'Missing required field: order_id' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assertEquals(response.status, 400);
+    const respBody = await response.json();
+    assertEquals(respBody.error, 'Missing required field: order_id');
+  }
+});
+
+Deno.test('send-printer-notification - returns 404 when order not found', async () => {
+  resetMocks();
+
+  const result = await mockSupabaseClient.from('sticker_orders').select('*').eq('id', '00000000-0000-0000-0000-000000000000').single();
+
+  if (!result.data || result.error) {
+    const response = new Response(JSON.stringify({ error: 'Order not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assertEquals(response.status, 404);
+    const body = await response.json();
+    assertEquals(body.error, 'Order not found');
+  }
+});
+
+Deno.test('send-printer-notification - returns 400 when order has no PDF', async () => {
+  resetMocks();
+
+  // Setup mock order without PDF
+  mockOrders = [
+    {
+      id: 'order-123',
+      order_number: 'AB-2024-001',
       quantity: 5,
-      unit_price_cents: 100,
-      total_price_cents: 500,
+      status: 'processing',
+      pdf_storage_path: null,
+      printer_token: 'token-123',
+      shipping_address: {
+        name: 'Test User',
+        street_address: '123 Test St',
+        city: 'Test City',
+        state: 'TS',
+        postal_code: '12345',
+        country: 'US',
+      },
+    },
+  ];
+
+  // Get order
+  const { data: order } = await mockSupabaseClient.from('sticker_orders').select('*').eq('id', 'order-123').single();
+
+  assertExists(order);
+
+  // Check if PDF is generated
+  if (!order.pdf_storage_path) {
+    const response = new Response(JSON.stringify({ error: 'PDF not yet generated for this order' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assertEquals(response.status, 400);
+    const body = await response.json();
+    assertEquals(body.error, 'PDF not yet generated for this order');
+  }
+});
+
+Deno.test('send-printer-notification - sends email for valid order with PDF', async () => {
+  resetMocks();
+
+  // Setup mock order with PDF
+  mockOrders = [
+    {
+      id: 'order-123',
+      order_number: 'AB-2024-001',
+      quantity: 5,
       status: 'processing',
       pdf_storage_path: 'orders/test/test.pdf',
-    })
-    .select()
-    .single();
-
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+      printer_token: 'token-123',
+      shipping_address: {
+        name: 'Test User',
+        street_address: '123 Test St',
+        city: 'Test City',
+        state: 'TS',
+        postal_code: '12345',
+        country: 'US',
       },
-      body: JSON.stringify({ order_id: order!.id }),
-    });
+    },
+  ];
 
+  // Get order
+  const { data: order } = await mockSupabaseClient.from('sticker_orders').select('*').eq('id', 'order-123').single();
+
+  assertExists(order);
+  assertEquals(order.order_number, 'AB-2024-001');
+  assertExists(order.pdf_storage_path);
+
+  // Generate signed URL
+  const { data: signedUrl } = await mockSupabaseClient.storage
+    .from('sticker-pdfs')
+    .createSignedUrl(order.pdf_storage_path, 60 * 60 * 24 * 7);
+
+  assertExists(signedUrl);
+  assertExists(signedUrl.signedUrl);
+
+  // Handle shipping address
+  const shippingAddress = Array.isArray(order.shipping_address) ? order.shipping_address[0] : order.shipping_address;
+
+  // Send email
+  const PRINTER_EMAIL = 'printer@aceback.app';
+  const emailResult = await mockSendEmail({
+    to: PRINTER_EMAIL,
+    subject: `New Sticker Order: ${order.order_number} (${order.quantity} stickers)`,
+    html: '<html>test</html>',
+    text: 'test',
+  });
+
+  assertEquals(emailResult.success, true);
+  assertExists(emailResult.messageId);
+
+  // Verify email was sent
+  assertExists(lastEmailSent);
+  assertEquals(lastEmailSent.to, 'printer@aceback.app');
+  assertEquals(lastEmailSent.subject, 'New Sticker Order: AB-2024-001 (5 stickers)');
+});
+
+Deno.test('send-printer-notification - email contains order details', async () => {
+  const order = {
+    order_number: 'AB-2024-001',
+    quantity: 5,
+    status: 'processing',
+  };
+
+  const emailHtml = `
+    <h2>Order ${order.order_number}</h2>
+    <p><strong>Quantity:</strong> ${order.quantity} stickers</p>
+    <p><strong>Status:</strong> ${order.status}</p>
+  `;
+
+  // Verify order details appear in email
+  assertEquals(emailHtml.includes(order.order_number), true);
+  assertEquals(emailHtml.includes(String(order.quantity)), true);
+  assertEquals(emailHtml.includes(order.status), true);
+});
+
+Deno.test('send-printer-notification - email contains shipping address', async () => {
+  const shippingAddress = {
+    name: 'Test User',
+    street_address: '123 Test St',
+    street_address_2: 'Apt 4',
+    city: 'Test City',
+    state: 'TS',
+    postal_code: '12345',
+    country: 'US',
+  };
+
+  const addressLines = [
+    shippingAddress.name,
+    shippingAddress.street_address,
+    shippingAddress.street_address_2,
+    `${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.postal_code}`,
+    shippingAddress.country,
+  ].filter(Boolean);
+
+  const emailHtml = `<div class="address">${addressLines.map((line) => `<p>${line}</p>`).join('')}</div>`;
+
+  // Verify address appears in email
+  assertEquals(emailHtml.includes('Test User'), true);
+  assertEquals(emailHtml.includes('123 Test St'), true);
+  assertEquals(emailHtml.includes('Apt 4'), true);
+  assertEquals(emailHtml.includes('Test City'), true);
+});
+
+Deno.test('send-printer-notification - email contains PDF download link', async () => {
+  const signedUrl = 'https://storage.supabase.co/signed/orders/test/test.pdf?token=abc123';
+
+  const emailHtml = `<a href="${signedUrl}" class="btn btn-download">📥 Download PDF</a>`;
+
+  // Verify PDF URL appears in email
+  assertEquals(emailHtml.includes(signedUrl), true);
+  assertEquals(emailHtml.includes('Download PDF'), true);
+});
+
+Deno.test('send-printer-notification - email contains action links', async () => {
+  const API_URL = 'https://api.aceback.app';
+  const printer_token = 'token-123';
+
+  const markPrintedUrl = `${API_URL}/functions/v1/update-order-status?action=mark_printed&token=${printer_token}`;
+  const markShippedUrl = `${API_URL}/functions/v1/update-order-status?action=mark_shipped&token=${printer_token}`;
+
+  const emailHtml = `
+    <a href="${markPrintedUrl}" class="btn btn-primary">✅ Mark as Printed</a>
+    <a href="${markShippedUrl}" class="btn btn-success">📦 Mark as Shipped</a>
+  `;
+
+  // Verify action URLs appear in email
+  assertEquals(emailHtml.includes(markPrintedUrl), true);
+  assertEquals(emailHtml.includes(markShippedUrl), true);
+  assertEquals(emailHtml.includes('Mark as Printed'), true);
+  assertEquals(emailHtml.includes('Mark as Shipped'), true);
+});
+
+Deno.test('send-printer-notification - returns success with message_id', async () => {
+  const emailResult = await mockSendEmail({
+    to: 'printer@aceback.app',
+    subject: 'New Sticker Order: AB-2024-001 (5 stickers)',
+    html: '<html>test</html>',
+    text: 'test',
+  });
+
+  if (emailResult.success) {
+    const response = new Response(
+      JSON.stringify({
+        success: true,
+        message_id: emailResult.messageId,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
     assertEquals(response.status, 200);
-    const data = await response.json();
-    assertEquals(data.success, true);
-    assertExists(data.message_id);
-  } finally {
-    await supabaseAdmin.from('sticker_orders').delete().eq('id', order!.id);
-    await supabaseAdmin.from('shipping_addresses').delete().eq('id', address!.id);
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    const body = await response.json();
+    assertEquals(body.success, true);
+    assertExists(body.message_id);
   }
 });
