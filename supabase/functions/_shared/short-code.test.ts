@@ -1,4 +1,4 @@
-import { assertEquals, assertNotEquals } from 'https://deno.land/std@0.192.0/testing/asserts.ts';
+import { assertEquals } from 'https://deno.land/std@0.192.0/testing/asserts.ts';
 import { generateShortCode, generateShortCodes } from './short-code.ts';
 
 Deno.test('generateShortCode: should generate 8 character code', () => {

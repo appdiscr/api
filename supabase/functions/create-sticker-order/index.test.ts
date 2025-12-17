@@ -215,11 +215,7 @@ Deno.test('create-sticker-order: should create order and return checkout URL', a
     assertExists(data.order_number);
 
     // Verify order was created in database
-    const { data: order } = await supabaseAdmin
-      .from('sticker_orders')
-      .select('*')
-      .eq('id', data.order_id)
-      .single();
+    const { data: order } = await supabaseAdmin.from('sticker_orders').select('*').eq('id', data.order_id).single();
 
     assertExists(order);
     assertEquals(order?.quantity, 10);

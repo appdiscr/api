@@ -131,7 +131,8 @@ Deno.serve(async (req) => {
   }
 
   // Remove user_id from response
-  const { user_id: _, ...orderWithoutUserId } = order;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { user_id: _userId, ...orderWithoutUserId } = order;
 
   return new Response(
     JSON.stringify({
