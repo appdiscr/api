@@ -146,11 +146,7 @@ Deno.test('update-order-status: should update order status to printed', async ()
     assertExists(data.order.printed_at);
 
     // Verify in database
-    const { data: updatedOrder } = await supabaseAdmin
-      .from('sticker_orders')
-      .select()
-      .eq('id', order!.id)
-      .single();
+    const { data: updatedOrder } = await supabaseAdmin.from('sticker_orders').select().eq('id', order!.id).single();
 
     assertEquals(updatedOrder?.status, 'printed');
     assertExists(updatedOrder?.printed_at);
@@ -225,11 +221,7 @@ Deno.test('update-order-status: should update order status to shipped with track
     assertExists(data.order.shipped_at);
 
     // Verify in database
-    const { data: updatedOrder } = await supabaseAdmin
-      .from('sticker_orders')
-      .select()
-      .eq('id', order!.id)
-      .single();
+    const { data: updatedOrder } = await supabaseAdmin.from('sticker_orders').select().eq('id', order!.id).single();
 
     assertEquals(updatedOrder?.status, 'shipped');
     assertEquals(updatedOrder?.tracking_number, '1Z999AA10123456784');

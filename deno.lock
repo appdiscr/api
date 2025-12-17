@@ -1655,7 +1655,8 @@
     }
   },
   "redirects": {
-    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.87.1"
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.87.1",
+    "https://esm.sh/@types/qrcode@~1.5.6/index.d.ts": "https://esm.sh/@types/qrcode@1.5.6/index.d.ts"
   },
   "remote": {
     "https://deno.land/std@0.192.0/fmt/colors.ts": "d67e3cd9f472535241a8e410d33423980bec45047e343577554d3356e1f0ef4e",
@@ -1679,7 +1680,10 @@
     "https://deno.land/std@0.208.0/encoding/base64.ts": "81c0ecff5ccb402def58ca03d8bd245bd01da15a077d3362b568e991aa10f4d9",
     "https://deno.land/std@0.208.0/encoding/base64url.ts": "b15a4c8c988362536334a31dbb75a2429346f8c0f9e2662f961567c5dd2f58e1",
     "https://deno.land/std@0.208.0/encoding/hex.ts": "a384101d02cd87036c708f540825feb5b073c8527a00d635e48b2e69c992a5f9",
-    "https://esm.sh/@supabase/supabase-js@2.87.1": "103ac54a7a223047234abf729ea8474d1e107b63435db8f8e3d13b3d929859af"
+    "https://esm.sh/@supabase/supabase-js@2.87.1": "103ac54a7a223047234abf729ea8474d1e107b63435db8f8e3d13b3d929859af",
+    "https://esm.sh/pdf-lib@1.17.1": "cf7c5527829cb9bbb3aa20d339c530067441c10eb98880360aea9e77c3c87ff8",
+    "https://esm.sh/qrcode@1.5.3": "56a09b1c1317c4fd6a296695437a365b0613d64e6461d44526b16882417cc5fb",
+    "https://esm.sh/stripe@14.21.0?target=deno": "c68b76780452938e9bbae9e312323e97869ccbdafeb83ddf372746ffa52f6b66"
   },
   "workspace": {
     "packageJson": {
