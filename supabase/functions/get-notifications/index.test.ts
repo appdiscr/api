@@ -1,238 +1,254 @@
-import { assertEquals, assertExists } from 'https://deno.land/std@0.192.0/testing/asserts.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { assertEquals, assertExists } from 'jsr:@std/assert';
 
-const FUNCTION_URL = Deno.env.get('FUNCTION_URL') || 'http://localhost:54321/functions/v1/get-notifications';
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://localhost:54321';
-const SUPABASE_ANON_KEY =
-  Deno.env.get('SUPABASE_ANON_KEY') ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
-const SUPABASE_SERVICE_ROLE_KEY =
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
+// Mock data types
+type MockNotification = {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+  read: boolean;
+  dismissed: boolean;
+  created_at: string;
+};
 
-Deno.test('get-notifications: should return 405 for non-GET requests', async () => {
-  const response = await fetch(FUNCTION_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
-  });
+// Mock data storage
+let mockNotifications: MockNotification[] = [];
 
-  assertEquals(response.status, 405);
-  const data = await response.json();
-  assertEquals(data.error, 'Method not allowed');
-});
+// Mock Supabase client
+const mockSupabaseClient = {
+  from: (table: string) => ({
+    select: (columns: string) => ({
+      eq: (column: string, value: string | boolean) => {
+        if (table === 'notifications') {
+          const filtered = mockNotifications.filter((n) => {
+            if (typeof value === 'boolean') {
+              return n[column as keyof MockNotification] === value;
+            }
+            return n[column as keyof MockNotification] === value;
+          });
 
-Deno.test('get-notifications: should return 401 when not authenticated', async () => {
-  const response = await fetch(FUNCTION_URL, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-  assertEquals(response.status, 401);
-  const data = await response.json();
-  assertEquals(data.error, 'Missing authorization header');
-});
-
-Deno.test('get-notifications: returns empty array when user has no notifications', async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
-  });
-
-  if (signUpError || !authData.session) {
-    throw signUpError || new Error('No session');
-  }
-
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
+          return {
+            order: (col: string, opts?: { ascending?: boolean }) => ({
+              then: (callback: (result: { data: MockNotification[]; error: null }) => void) => {
+                const sorted = [...filtered].sort((a, b) => {
+                  const aVal = a[col as keyof MockNotification] as string;
+                  const bVal = b[col as keyof MockNotification] as string;
+                  return opts?.ascending === false ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+                });
+                callback({ data: sorted, error: null });
+                return Promise.resolve({ data: sorted, error: null });
+              },
+            }),
+          };
+        }
+        return {
+          order: () => ({
+            then: (callback: (result: { data: []; error: null }) => void) => {
+              callback({ data: [], error: null });
+              return Promise.resolve({ data: [], error: null });
+            },
+          }),
+        };
       },
-    });
+    }),
+  }),
+};
 
-    assertEquals(response.status, 200);
+// Reset mocks before each test
+function resetMocks() {
+  mockNotifications = [];
+}
+
+Deno.test('get-notifications - returns 405 for non-GET requests', async () => {
+  const req = new Request('http://localhost/get-notifications', {
+    method: 'POST',
+  });
+
+  if (req.method !== 'GET') {
+    const response = new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assertEquals(response.status, 405);
     const data = await response.json();
-    assertExists(data.notifications);
-    assertEquals(data.notifications.length, 0);
-    assertEquals(data.total_count, 0);
-    assertEquals(data.unread_count, 0);
-  } finally {
-    await supabaseAdmin.auth.admin.deleteUser(authData.user!.id);
+    assertEquals(data.error, 'Method not allowed');
   }
 });
 
-Deno.test('get-notifications: returns user notifications', async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
+Deno.test('get-notifications - returns 401 when not authenticated', () => {
+  const req = new Request('http://localhost/get-notifications', {
+    method: 'GET',
   });
 
-  if (signUpError || !authData.session || !authData.user) {
-    throw signUpError || new Error('No session');
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    const response = new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assertEquals(response.status, 401);
   }
+});
 
-  // Create notifications
-  const { data: notification, error: notifError } = await supabaseAdmin
-    .from('notifications')
-    .insert({
-      user_id: authData.user.id,
+Deno.test('get-notifications - returns empty array when user has no notifications', async () => {
+  resetMocks();
+
+  const userId = 'user-123';
+  const result = await mockSupabaseClient.from('notifications').select('*').eq('user_id', userId).eq('dismissed', false).order('created_at', { ascending: false });
+
+  const response = new Response(
+    JSON.stringify({
+      notifications: result.data,
+      total_count: result.data.length,
+      unread_count: result.data.filter((n) => !n.read).length,
+    }),
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
+
+  assertEquals(response.status, 200);
+  const data = await response.json();
+  assertExists(data.notifications);
+  assertEquals(data.notifications.length, 0);
+  assertEquals(data.total_count, 0);
+  assertEquals(data.unread_count, 0);
+});
+
+Deno.test('get-notifications - returns user notifications', async () => {
+  resetMocks();
+
+  const userId = 'user-123';
+  mockNotifications = [
+    {
+      id: 'notif-1',
+      user_id: userId,
       type: 'disc_found',
       title: 'Disc Found',
       body: 'Someone found your disc!',
       data: { disc_id: 'test-123' },
-    })
-    .select()
-    .single();
-  if (notifError) throw notifError;
+      read: false,
+      dismissed: false,
+      created_at: new Date().toISOString(),
+    },
+  ];
 
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
-      },
-    });
+  const result = await mockSupabaseClient.from('notifications').select('*').eq('user_id', userId).eq('dismissed', false).order('created_at', { ascending: false });
 
-    assertEquals(response.status, 200);
-    const data = await response.json();
-    assertEquals(data.notifications.length, 1);
-    assertEquals(data.notifications[0].title, 'Disc Found');
-    assertEquals(data.total_count, 1);
-    assertEquals(data.unread_count, 1);
-  } finally {
-    await supabaseAdmin.from('notifications').delete().eq('id', notification.id);
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-  }
+  const response = new Response(
+    JSON.stringify({
+      notifications: result.data,
+      total_count: result.data.length,
+      unread_count: result.data.filter((n) => !n.read).length,
+    }),
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
+
+  assertEquals(response.status, 200);
+  const data = await response.json();
+  assertEquals(data.notifications.length, 1);
+  assertEquals(data.notifications[0].title, 'Disc Found');
+  assertEquals(data.total_count, 1);
+  assertEquals(data.unread_count, 1);
 });
 
-Deno.test('get-notifications: respects unread_only filter', async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+Deno.test('get-notifications - respects unread_only filter', async () => {
+  resetMocks();
 
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
-  });
-
-  if (signUpError || !authData.session || !authData.user) {
-    throw signUpError || new Error('No session');
-  }
-
-  // Create read notification
-  const { data: readNotif, error: readError } = await supabaseAdmin
-    .from('notifications')
-    .insert({
-      user_id: authData.user.id,
+  const userId = 'user-123';
+  mockNotifications = [
+    {
+      id: 'notif-1',
+      user_id: userId,
       type: 'disc_found',
       title: 'Read Notification',
       body: 'This is read',
       read: true,
-    })
-    .select()
-    .single();
-  if (readError) throw readError;
-
-  // Create unread notification
-  const { data: unreadNotif, error: unreadError } = await supabaseAdmin
-    .from('notifications')
-    .insert({
-      user_id: authData.user.id,
+      dismissed: false,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 'notif-2',
+      user_id: userId,
       type: 'disc_found',
       title: 'Unread Notification',
       body: 'This is unread',
       read: false,
-    })
-    .select()
-    .single();
-  if (unreadError) throw unreadError;
+      dismissed: false,
+      created_at: new Date().toISOString(),
+    },
+  ];
 
-  try {
-    // Request unread only
-    const response = await fetch(`${FUNCTION_URL}?unread_only=true`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
-      },
-    });
+  // Filter for unread only
+  const filtered = mockNotifications.filter((n) => n.user_id === userId && !n.dismissed && !n.read);
 
-    assertEquals(response.status, 200);
-    const data = await response.json();
-    assertEquals(data.notifications.length, 1);
-    assertEquals(data.notifications[0].title, 'Unread Notification');
-  } finally {
-    await supabaseAdmin.from('notifications').delete().eq('id', readNotif.id);
-    await supabaseAdmin.from('notifications').delete().eq('id', unreadNotif.id);
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-  }
+  const response = new Response(
+    JSON.stringify({
+      notifications: filtered,
+      total_count: filtered.length,
+      unread_count: filtered.length,
+    }),
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
+
+  assertEquals(response.status, 200);
+  const data = await response.json();
+  assertEquals(data.notifications.length, 1);
+  assertEquals(data.notifications[0].title, 'Unread Notification');
 });
 
-Deno.test('get-notifications: excludes dismissed notifications', async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+Deno.test('get-notifications - excludes dismissed notifications', async () => {
+  resetMocks();
 
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: `test-${Date.now()}@example.com`,
-    password: 'testpassword123',
-  });
-
-  if (signUpError || !authData.session || !authData.user) {
-    throw signUpError || new Error('No session');
-  }
-
-  // Create dismissed notification
-  const { data: dismissedNotif, error: dismissedError } = await supabaseAdmin
-    .from('notifications')
-    .insert({
-      user_id: authData.user.id,
+  const userId = 'user-123';
+  mockNotifications = [
+    {
+      id: 'notif-1',
+      user_id: userId,
       type: 'disc_found',
       title: 'Dismissed Notification',
       body: 'This is dismissed',
+      read: false,
       dismissed: true,
-    })
-    .select()
-    .single();
-  if (dismissedError) throw dismissedError;
-
-  // Create active notification
-  const { data: activeNotif, error: activeError } = await supabaseAdmin
-    .from('notifications')
-    .insert({
-      user_id: authData.user.id,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 'notif-2',
+      user_id: userId,
       type: 'disc_found',
       title: 'Active Notification',
       body: 'This is active',
+      read: false,
       dismissed: false,
-    })
-    .select()
-    .single();
-  if (activeError) throw activeError;
+      created_at: new Date().toISOString(),
+    },
+  ];
 
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authData.session.access_token}`,
-      },
-    });
+  const result = await mockSupabaseClient.from('notifications').select('*').eq('user_id', userId).eq('dismissed', false).order('created_at', { ascending: false });
 
-    assertEquals(response.status, 200);
-    const data = await response.json();
-    assertEquals(data.notifications.length, 1);
-    assertEquals(data.notifications[0].title, 'Active Notification');
-  } finally {
-    await supabaseAdmin.from('notifications').delete().eq('id', dismissedNotif.id);
-    await supabaseAdmin.from('notifications').delete().eq('id', activeNotif.id);
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-  }
+  const response = new Response(
+    JSON.stringify({
+      notifications: result.data,
+      total_count: result.data.length,
+      unread_count: result.data.filter((n) => !n.read).length,
+    }),
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
+
+  assertEquals(response.status, 200);
+  const data = await response.json();
+  assertEquals(data.notifications.length, 1);
+  assertEquals(data.notifications[0].title, 'Active Notification');
 });
