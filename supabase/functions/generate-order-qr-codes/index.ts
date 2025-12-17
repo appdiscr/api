@@ -144,10 +144,7 @@ Deno.serve(async (req) => {
     assigned_to: order.user_id,
   }));
 
-  const { data: qrCodes, error: qrError } = await supabaseAdmin
-    .from('qr_codes')
-    .insert(qrCodeData)
-    .select();
+  const { data: qrCodes, error: qrError } = await supabaseAdmin.from('qr_codes').insert(qrCodeData).select();
 
   if (qrError || !qrCodes || qrCodes.length !== order.quantity) {
     console.error('Failed to create QR codes:', qrError);

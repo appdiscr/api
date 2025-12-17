@@ -1,8 +1,7 @@
 import { assertEquals, assertExists } from 'https://deno.land/std@0.192.0/testing/asserts.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const FUNCTION_URL =
-  Deno.env.get('FUNCTION_URL') || 'http://localhost:54321/functions/v1/generate-order-qr-codes';
+const FUNCTION_URL = Deno.env.get('FUNCTION_URL') || 'http://localhost:54321/functions/v1/generate-order-qr-codes';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://localhost:54321';
 const SUPABASE_ANON_KEY =
   Deno.env.get('SUPABASE_ANON_KEY') ||
@@ -182,10 +181,7 @@ Deno.test('generate-order-qr-codes: should generate QR codes for paid order', as
     }
 
     // Verify order items were created
-    const { data: orderItems } = await supabaseAdmin
-      .from('sticker_order_items')
-      .select('*')
-      .eq('order_id', order!.id);
+    const { data: orderItems } = await supabaseAdmin.from('sticker_order_items').select('*').eq('order_id', order!.id);
 
     assertEquals(orderItems?.length, 5);
 
