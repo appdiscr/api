@@ -226,6 +226,10 @@ Deno.serve(async (req) => {
   // Get app URLs from environment
   const appUrl = Deno.env.get('APP_URL') || 'https://aceback.app';
 
+  // For mobile, use a simple success page that closes the browser
+  const successUrl = `${appUrl}/checkout-success?order_id=${order.id}`;
+  const cancelUrl = `${appUrl}/checkout-cancel?order_id=${order.id}`;
+
   try {
     // Create Stripe Checkout session
     const session = await stripe.checkout.sessions.create({
@@ -244,8 +248,8 @@ Deno.serve(async (req) => {
         },
       ],
       mode: 'payment',
-      success_url: `${appUrl}/orders/${order.id}?status=success`,
-      cancel_url: `${appUrl}/orders/${order.id}?status=cancelled`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       metadata: {
         order_id: order.id,
         order_number: order.order_number,
