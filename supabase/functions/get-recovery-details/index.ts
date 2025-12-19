@@ -131,10 +131,11 @@ Deno.serve(async (req) => {
   // Get owner profile
   let ownerDisplayName = 'Unknown';
   let ownerAvatarUrl: string | null = null;
+  let ownerVenmoUsername: string | null = null;
   if (disc?.owner_id) {
     const { data: ownerProfile } = await supabaseAdmin
       .from('profiles')
-      .select('username, full_name, display_preference, email, avatar_url')
+      .select('username, full_name, display_preference, email, avatar_url, venmo_username')
       .eq('id', disc.owner_id)
       .single();
 
@@ -147,6 +148,7 @@ Deno.serve(async (req) => {
         ownerDisplayName = ownerProfile.email.split('@')[0];
       }
       ownerAvatarUrl = await resolveAvatarUrl(ownerProfile.email, ownerProfile.avatar_url, supabaseAdmin);
+      ownerVenmoUsername = ownerProfile.venmo_username || null;
     }
   }
 
@@ -250,6 +252,7 @@ Deno.serve(async (req) => {
         id: disc?.owner_id,
         display_name: ownerDisplayName,
         avatar_url: ownerAvatarUrl,
+        venmo_username: ownerVenmoUsername,
       },
       finder: {
         id: recovery.finder_id,
