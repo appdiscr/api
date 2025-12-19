@@ -5,6 +5,7 @@
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@supabase/functions-js@*": "2.87.1",
     "npm:@eslint/js@^9.39.1": "9.39.1",
+    "npm:@imagemagick/magick-wasm@0.0.30": "0.0.30",
     "npm:@types/node@24": "24.10.3",
     "npm:@vitest/coverage-v8@4": "4.0.15_vitest@4.0.15__@types+node@24.10.3__vite@7.2.7___@types+node@24.10.3___picomatch@4.0.3_@types+node@24.10.3",
     "npm:drizzle-kit@0.31": "0.31.8_esbuild@0.25.12",
@@ -390,6 +391,9 @@
     },
     "@humanwhocodes/retry@0.4.3": {
       "integrity": "sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ=="
+    },
+    "@imagemagick/magick-wasm@0.0.30": {
+      "integrity": "sha512-l5pTepsyrM9O3zMdmDHGbncP2Uf4858nylU5tw6GE7QA/Qh99aEFr4eNkEan3q1PT6mV/1Ev0gOgthuK7/kNFQ=="
     },
     "@jridgewell/resolve-uri@3.1.2": {
       "integrity": "sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw=="
