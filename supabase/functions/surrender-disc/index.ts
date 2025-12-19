@@ -173,11 +173,13 @@ Deno.serve(async (req) => {
   }
 
   // Update QR code assignment if disc has a QR code
+  // Ensure status remains 'active' since the QR is still linked to the disc
   if (qrCodeId) {
     const { error: qrUpdateError } = await supabaseAdmin
       .from('qr_codes')
       .update({
         assigned_to: finderId,
+        status: 'active', // Ensure status stays active when transferring ownership
         updated_at: now,
       })
       .eq('id', qrCodeId);
