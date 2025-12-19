@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
       finder_message,
       found_at,
       recovered_at,
+      reward_paid_at,
       created_at,
       updated_at,
       disc:discs(
@@ -235,6 +236,7 @@ Deno.serve(async (req) => {
       finder_message: recovery.finder_message,
       found_at: recovery.found_at,
       recovered_at: recovery.recovered_at,
+      reward_paid_at: recovery.reward_paid_at,
       created_at: recovery.created_at,
       updated_at: recovery.updated_at,
       user_role: isOwner ? 'owner' : 'finder',

@@ -1,9 +1,4 @@
-import {
-  ImageMagick,
-  initializeImageMagick,
-  MagickFormat,
-  MagickGeometry,
-} from 'npm:@imagemagick/magick-wasm@0.0.30';
+import { ImageMagick, initializeImageMagick, MagickFormat, MagickGeometry } from 'npm:@imagemagick/magick-wasm@0.0.30';
 
 // Initialize ImageMagick WASM - must be called before using ImageMagick
 let initialized = false;
@@ -126,10 +121,7 @@ export async function compressImage(
  * @param options - Compression options
  * @returns Compression result with optimized image data
  */
-export async function compressImageFile(
-  file: File,
-  options: CompressionOptions = {}
-): Promise<CompressionResult> {
+export async function compressImageFile(file: File, options: CompressionOptions = {}): Promise<CompressionResult> {
   const arrayBuffer = await file.arrayBuffer();
   const imageData = new Uint8Array(arrayBuffer);
   return compressImage(imageData, options);
