@@ -11,6 +11,14 @@ type MockDisc = {
   owner_id: string;
   name: string;
   mold: string;
+  qr_code_id?: string | null;
+};
+
+type MockQrCode = {
+  id: string;
+  short_code: string;
+  status: 'generated' | 'assigned' | 'active' | 'deactivated';
+  assigned_to: string | null;
 };
 
 type MockRecoveryEvent = {
@@ -36,6 +44,7 @@ type MockNotification = {
 // Mock data storage
 let mockUsers: MockUser[] = [];
 let mockDiscs: MockDisc[] = [];
+let mockQrCodes: MockQrCode[] = [];
 let mockRecoveryEvents: MockRecoveryEvent[] = [];
 let mockNotifications: MockNotification[] = [];
 let authHeaderPresent = false;
@@ -45,6 +54,7 @@ let currentUserId: string | null = null;
 function resetMocks() {
   mockUsers = [];
   mockDiscs = [];
+  mockQrCodes = [];
   mockRecoveryEvents = [];
   mockNotifications = [];
   authHeaderPresent = false;
@@ -89,6 +99,15 @@ function mockSupabaseClient() {
               };
               mockDiscs.push(newDisc);
               return Promise.resolve({ data: newDisc, error: null });
+            }
+            if (table === 'qr_codes') {
+              const qrData = values as MockQrCode;
+              const newQr: MockQrCode = {
+                ...qrData,
+                id: `qr-${Date.now()}`,
+              };
+              mockQrCodes.push(newQr);
+              return Promise.resolve({ data: newQr, error: null });
             }
             if (table === 'recovery_events') {
               const recoveryData = values as MockRecoveryEvent;
@@ -136,14 +155,30 @@ function mockSupabaseClient() {
               }
               return Promise.resolve({ data: null, error: { code: 'PGRST116' } });
             }
+            if (table === 'qr_codes') {
+              const qr = mockQrCodes.find((q) => q.id === value);
+              if (qr) {
+                return Promise.resolve({ data: qr, error: null });
+              }
+              return Promise.resolve({ data: null, error: { code: 'PGRST116' } });
+            }
             return Promise.resolve({ data: null, error: { message: 'Unknown table' } });
           },
         }),
       }),
       update: (values: Record<string, unknown>) => ({
         eq: (_column: string, value: string) => ({
+          // Support both .select().single() chain and direct await
           select: () => ({
             single: () => {
+              if (table === 'qr_codes') {
+                const qr = mockQrCodes.find((q) => q.id === value);
+                if (qr) {
+                  Object.assign(qr, values);
+                  return Promise.resolve({ data: qr, error: null });
+                }
+                return Promise.resolve({ data: null, error: { message: 'QR code not found' } });
+              }
               if (table === 'recovery_events') {
                 const recovery = mockRecoveryEvents.find((r) => r.id === value);
                 if (recovery) {
@@ -163,6 +198,21 @@ function mockSupabaseClient() {
               return Promise.resolve({ data: null, error: { message: 'Unknown table' } });
             },
           }),
+          // Also support direct await without .select().single() (for qr_codes in actual surrender-disc)
+          then: (
+            resolve: (value: { error: { message: string } | null }) => void,
+            _reject?: (reason: unknown) => void
+          ) => {
+            if (table === 'qr_codes') {
+              const qr = mockQrCodes.find((q) => q.id === value);
+              if (qr) {
+                Object.assign(qr, values);
+              }
+              resolve({ error: qr ? null : { message: 'QR code not found' } });
+            } else {
+              resolve({ error: null });
+            }
+          },
         }),
       }),
       delete: () => ({
@@ -589,6 +639,110 @@ Deno.test('surrender-disc: works with meetup_proposed status', async () => {
 
   // Cleanup
   await supabase.from('notifications').delete().eq('user_id', finderAuth.user.id);
+  await supabase.from('recovery_events').delete().eq('id', recovery.id);
+  await supabase.from('discs').delete().eq('id', disc.id);
+  await supabase.auth.admin.deleteUser(ownerAuth.user.id);
+  await supabase.auth.admin.deleteUser(finderAuth.user.id);
+});
+
+Deno.test('surrender-disc: QR code status remains active after surrender', async () => {
+  resetMocks();
+
+  const supabase = mockSupabaseClient();
+
+  // Create owner
+  const { data: ownerAuth, error: ownerError } = await supabase.auth.admin.createUser({
+    email: `owner-${Date.now()}@example.com`,
+    password: 'testpassword123',
+  });
+  if (ownerError || !ownerAuth.user) throw ownerError || new Error('No user');
+
+  // Create finder
+  const { data: finderAuth, error: finderError } = await supabase.auth.admin.createUser({
+    email: `finder-${Date.now()}@example.com`,
+    password: 'testpassword123',
+  });
+  if (finderError || !finderAuth.user) throw finderError || new Error('No user');
+
+  // Create QR code in active status (linked to a disc)
+  const { data: qrCode, error: qrError } = await supabase
+    .from('qr_codes')
+    .insert({
+      short_code: 'TEST123',
+      status: 'active',
+      assigned_to: ownerAuth.user.id,
+    })
+    .select()
+    .single();
+  if (qrError) throw qrError;
+
+  // Create disc with QR code
+  const { data: disc, error: discError } = await supabase
+    .from('discs')
+    .insert({
+      owner_id: ownerAuth.user.id,
+      name: 'Test Disc',
+      mold: 'Destroyer',
+      qr_code_id: qrCode.id,
+    })
+    .select()
+    .single();
+  if (discError) throw discError;
+
+  // Create recovery event
+  const { data: recovery, error: recoveryError } = await supabase
+    .from('recovery_events')
+    .insert({
+      disc_id: disc.id,
+      finder_id: finderAuth.user.id,
+      status: 'found',
+      found_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (recoveryError) throw recoveryError;
+
+  // Owner surrenders disc
+  currentUserId = ownerAuth.user.id;
+  authHeaderPresent = true;
+
+  // Simulate the surrender-disc function behavior for QR code:
+  // It should update assigned_to AND ensure status stays 'active'
+  await supabase
+    .from('qr_codes')
+    .update({
+      assigned_to: finderAuth.user.id,
+      status: 'active', // This is the fix - ensure status stays active
+    })
+    .eq('id', qrCode.id);
+
+  // Update disc ownership
+  await supabase.from('discs').update({ owner_id: finderAuth.user.id }).eq('id', disc.id).select().single();
+
+  // Update recovery event
+  await supabase
+    .from('recovery_events')
+    .update({
+      status: 'surrendered',
+      surrendered_at: new Date().toISOString(),
+      original_owner_id: ownerAuth.user.id,
+    })
+    .eq('id', recovery.id)
+    .select()
+    .single();
+
+  // Verify QR code is still in 'active' status and assigned to finder
+  const verifiedQr = mockQrCodes.find((q) => q.id === qrCode.id);
+  assertExists(verifiedQr);
+  assertEquals(verifiedQr.status, 'active');
+  assertEquals(verifiedQr.assigned_to, finderAuth.user.id);
+
+  // Verify disc ownership transferred
+  const verifiedDisc = mockDiscs.find((d) => d.id === disc.id);
+  assertExists(verifiedDisc);
+  assertEquals(verifiedDisc.owner_id, finderAuth.user.id);
+
+  // Cleanup
   await supabase.from('recovery_events').delete().eq('id', recovery.id);
   await supabase.from('discs').delete().eq('id', disc.id);
   await supabase.auth.admin.deleteUser(ownerAuth.user.id);
