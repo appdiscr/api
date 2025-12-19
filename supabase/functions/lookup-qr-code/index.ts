@@ -123,6 +123,7 @@ Deno.serve(async (req) => {
         qr_exists: true,
         qr_status: 'assigned',
         qr_code: qrCode.short_code,
+        qr_code_id: isAssignee ? qrCode.id : undefined, // Only return ID if user is assignee
         is_assignee: isAssignee,
       }),
       {
