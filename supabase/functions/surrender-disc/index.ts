@@ -2,6 +2,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendPushNotification } from '../_shared/push-notifications.ts';
 import { fetchDisplayName } from '../_shared/display-name.ts';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Surrender Disc Function
@@ -20,7 +21,7 @@ import { fetchDisplayName } from '../_shared/display-name.ts';
  * - Recovery must be in active state (found, meetup_proposed, or meetup_confirmed)
  */
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -265,4 +266,6 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
     }
   );
-});
+};
+
+Deno.serve(withSentry(handler));

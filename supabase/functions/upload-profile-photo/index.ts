@@ -1,11 +1,12 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { compressImageFile } from '../_shared/image-compression.ts';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -162,4 +163,6 @@ Deno.serve(async (req) => {
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );
-});
+};
+
+Deno.serve(withSentry(handler));

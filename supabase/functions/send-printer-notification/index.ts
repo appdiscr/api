@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail } from '../_shared/email.ts';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Send Printer Notification Function
@@ -21,7 +22,7 @@ const PRINTER_EMAIL = Deno.env.get('PRINTER_EMAIL') || 'printer@discrapp.com';
 // Use Supabase URL for edge function links (custom domain can be added later)
 const API_URL = Deno.env.get('SUPABASE_URL') || 'https://xhaogdigrsiwxdjmjzgx.supabase.co';
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -224,4 +225,6 @@ This email was sent automatically by Discr.
       headers: { 'Content-Type': 'application/json' },
     }
   );
-});
+};
+
+Deno.serve(withSentry(handler));

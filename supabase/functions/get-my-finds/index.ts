@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Get My Finds Function
@@ -13,7 +14,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
  * - Array of recovery events with disc info
  */
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   // Only allow GET requests
   if (req.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -172,4 +173,6 @@ Deno.serve(async (req) => {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
-});
+};
+
+Deno.serve(withSentry(handler));

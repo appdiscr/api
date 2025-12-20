@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14.21.0';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Send Reward Payment Function
@@ -31,7 +32,7 @@ function calculateStripeFee(amountCents: number): number {
   return totalCents - amountCents;
 }
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
@@ -272,4 +273,6 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-});
+};
+
+Deno.serve(withSentry(handler));

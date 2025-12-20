@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { sendEmail } from '../_shared/email.ts';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Test Email Function
@@ -9,7 +10,7 @@ import { sendEmail } from '../_shared/email.ts';
 
 const PRINTER_EMAIL = Deno.env.get('PRINTER_EMAIL') || 'test@example.com';
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
@@ -97,4 +98,6 @@ Configuration verified:
       headers: { 'Content-Type': 'application/json' },
     }
   );
-});
+};
+
+Deno.serve(withSentry(handler));

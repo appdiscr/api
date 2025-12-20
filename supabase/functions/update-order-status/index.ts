@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 // CORS headers for cross-origin requests from web app
 const CORS_HEADERS = {
@@ -55,7 +56,7 @@ function errorResponse(error: string, statusCode: number, isGet: boolean): Respo
   });
 }
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -257,4 +258,6 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     }
   );
-});
+};
+
+Deno.serve(withSentry(handler));

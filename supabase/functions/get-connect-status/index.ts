@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14.21.0';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Get Connect Status Function
@@ -17,7 +18,7 @@ import Stripe from 'npm:stripe@14.21.0';
  * - payouts_enabled: boolean (can receive transfers)
  */
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   if (req.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
@@ -159,4 +160,6 @@ Deno.serve(async (req) => {
       }
     );
   }
-});
+};
+
+Deno.serve(withSentry(handler));

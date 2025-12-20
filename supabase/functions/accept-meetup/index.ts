@@ -2,6 +2,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendPushNotification } from '../_shared/push-notifications.ts';
 import { fetchDisplayName } from '../_shared/display-name.ts';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Accept Meetup Function
@@ -21,7 +22,7 @@ import { fetchDisplayName } from '../_shared/display-name.ts';
  * - Proposal must exist and be in 'pending' status
  */
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -283,4 +284,6 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
     }
   );
-});
+};
+
+Deno.serve(withSentry(handler));

@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { PDFDocument, rgb, StandardFonts } from 'https://esm.sh/pdf-lib@1.17.1';
 import QRCode from 'https://esm.sh/qrcode@1.5.3';
 import { LOGO_BASE64 } from './logo-data.ts';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Generate Sticker PDF Function
@@ -34,7 +35,7 @@ const STICKERS_PER_COL = 5; // 25 stickers per page (was 20)
 // App URL for QR codes
 const APP_URL = 'https://discrapp.com/d';
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -291,4 +292,6 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-});
+};
+
+Deno.serve(withSentry(handler));

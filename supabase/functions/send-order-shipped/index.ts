@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail } from '../_shared/email.ts';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Send Order Shipped Function
@@ -41,7 +42,7 @@ function getTrackingUrl(trackingNumber: string): string {
   return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${trackingNumber}`;
 }
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -271,4 +272,6 @@ Discr - Never lose a disc again!
       headers: { 'Content-Type': 'application/json' },
     }
   );
-});
+};
+
+Deno.serve(withSentry(handler));

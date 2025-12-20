@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveAvatarUrl } from '../_shared/avatar.ts';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Get Recovery Details Function
@@ -17,7 +18,7 @@ import { resolveAvatarUrl } from '../_shared/avatar.ts';
  * - User's role (owner or finder)
  */
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   if (req.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
@@ -276,4 +277,6 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
     }
   );
-});
+};
+
+Deno.serve(withSentry(handler));

@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 /**
  * Sync Disc Catalog Function
@@ -47,7 +48,7 @@ interface CatalogDisc {
 const DISCIT_API_URL = 'https://discit-api.fly.dev/disc';
 const BATCH_SIZE = 100;
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   const startTime = Date.now();
 
   // Only allow POST requests
@@ -218,7 +219,9 @@ Deno.serve(async (req) => {
       }
     );
   }
-});
+};
+
+Deno.serve(withSentry(handler));
 
 /**
  * Parse a flight number string to a number.

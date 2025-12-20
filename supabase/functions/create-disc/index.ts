@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withSentry } from '../_shared/with-sentry.ts';
 
 interface FlightNumbers {
   speed: number;
@@ -37,7 +38,7 @@ function validateFlightNumbers(flightNumbers: FlightNumbers): string | null {
   return null;
 }
 
-Deno.serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -139,4 +140,6 @@ Deno.serve(async (req) => {
   }
 
   return new Response(JSON.stringify(disc), { status: 201, headers: { 'Content-Type': 'application/json' } });
-});
+};
+
+Deno.serve(withSentry(handler));
