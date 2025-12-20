@@ -107,7 +107,14 @@ jobs:
           supabase functions deploy --no-verify-jwt
 
   release:
-    needs: [migrate, deploy-functions]
+    needs: [test, check-edge-functions, migrate, deploy-functions]
+    # Run on PRs (when migrate/deploy are skipped) and on main (after they succeed)
+    if: |
+      always() &&
+      needs.test.result == 'success' &&
+      needs.check-edge-functions.result == 'success' &&
+      (needs.migrate.result == 'success' || needs.migrate.result == 'skipped') &&
+      (needs.deploy-functions.result == 'success' || needs.deploy-functions.result == 'skipped')
     uses: "discrapp/.github/.github/workflows/release.yml@main"
     secrets: inherit
     permissions:
