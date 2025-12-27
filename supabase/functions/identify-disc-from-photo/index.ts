@@ -218,7 +218,11 @@ const handler = async (req: Request): Promise<Response> => {
         statusCode: claudeResponse.status,
         errorText,
       });
-      return new Response(JSON.stringify({ error: 'AI identification failed' }), {
+      // Return detailed error for debugging
+      return new Response(JSON.stringify({
+        error: 'AI identification failed',
+        details: `Claude API returned ${claudeResponse.status}: ${errorText.substring(0, 500)}`,
+      }), {
         status: 502,
         headers: { 'Content-Type': 'application/json' },
       });
