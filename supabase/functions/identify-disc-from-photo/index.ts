@@ -329,21 +329,26 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     // Log the identification attempt
-    const { error: logError } = await supabaseAdmin.from('ai_identification_logs').insert({
-      user_id: user.id,
-      ai_manufacturer: identification.manufacturer,
-      ai_mold: identification.mold,
-      ai_confidence: identification.confidence,
-      ai_flight_numbers: identification.flight_numbers,
-      ai_plastic: identification.plastic,
-      ai_raw_response: {
-        identification,
+    const { data: logData, error: logError } = await supabaseAdmin
+      .from('ai_identification_logs')
+      .insert({
+        user_id: user.id,
+        ai_manufacturer: identification.manufacturer,
+        ai_mold: identification.mold,
+        ai_confidence: identification.confidence,
+        ai_flight_numbers: identification.flight_numbers,
+        ai_plastic: identification.plastic,
+        ai_color: identification.color,
+        ai_raw_response: {
+          identification,
+          catalog_match_id: catalogMatch?.id || null,
+        },
         catalog_match_id: catalogMatch?.id || null,
-      },
-      catalog_match_id: catalogMatch?.id || null,
-      processing_time_ms: processingTime,
-      model_version: 'claude-sonnet-4-20250514',
-    });
+        processing_time_ms: processingTime,
+        model_version: 'claude-sonnet-4-20250514',
+      })
+      .select('id')
+      .single();
 
     if (logError) {
       // Log but don't fail the request
@@ -364,6 +369,7 @@ const handler = async (req: Request): Promise<Response> => {
         catalog_match: catalogMatch,
         similar_matches: similarMatches,
         processing_time_ms: processingTime,
+        log_id: logData?.id || null,
       }),
       {
         status: 200,
