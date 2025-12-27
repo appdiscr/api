@@ -84,13 +84,17 @@ no logic to test.
 
 ```bash
 # Run all tests with coverage
-deno test --coverage=.coverage --allow-all
+# Note: --reload flag bypasses lock file integrity checks for esm.sh dependencies
+deno test --coverage=.coverage --allow-all --reload
 
-# Generate coverage report
-deno coverage .coverage
+# Generate coverage report (excluding third-party integrations)
+deno coverage .coverage --exclude='supabase/functions/_shared/sentry-integration.ts'
 
 # Generate HTML coverage report
-deno coverage .coverage --html
+deno coverage .coverage --exclude='supabase/functions/_shared/sentry-integration.ts' --html
+
+# Or use the convenience script
+./scripts/test-coverage.sh
 ```
 
 ### Coverage Thresholds

@@ -15,7 +15,7 @@ cd "$(dirname "$0")/.."
 echo "🧪 Running tests with coverage..."
 cd supabase/functions
 rm -rf .coverage
-deno test --coverage=.coverage --allow-all
+deno test --coverage=.coverage --allow-all --reload
 
 echo ""
 echo "📊 Generating coverage report (excluding third-party integrations)..."
