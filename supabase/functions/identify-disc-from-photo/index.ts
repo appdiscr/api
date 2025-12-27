@@ -39,6 +39,7 @@ interface DiscIdentification {
     fade: number | null;
   } | null;
   plastic: string | null;
+  color: string | null;
   confidence: number;
   visible_text: string;
 }
@@ -62,6 +63,7 @@ Look for:
 - Disc mold/model name on the stamp (e.g., Destroyer, Buzzz, Tesla, Reactor, PD2, Judge)
 - Any flight numbers visible (4 numbers like 12/5/-1/3)
 - Plastic type if visible (Champion, Star, ESP, Neutron, etc.)
+- The primary color of the disc (choose from: Red, Orange, Yellow, Green, Blue, Purple, Pink, White, Black, Gray, or Multi for multicolored/tie-dye)
 
 IMPORTANT: Return ONLY a valid JSON object with no additional text, markdown, or explanation.
 
@@ -70,6 +72,7 @@ IMPORTANT: Return ONLY a valid JSON object with no additional text, markdown, or
   "mold": "string or null if unknown",
   "flight_numbers": {"speed": N, "glide": N, "turn": N, "fade": N} or null,
   "plastic": "string or null if unknown",
+  "color": "Red|Orange|Yellow|Green|Blue|Purple|Pink|White|Black|Gray|Multi",
   "confidence": 0.0-1.0,
   "visible_text": "describe all text/logos visible on the disc"
 }
@@ -356,6 +359,7 @@ const handler = async (req: Request): Promise<Response> => {
           raw_text: identification.visible_text,
           flight_numbers: identification.flight_numbers,
           plastic: identification.plastic,
+          color: identification.color,
         },
         catalog_match: catalogMatch,
         similar_matches: similarMatches,
