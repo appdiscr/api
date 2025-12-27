@@ -134,7 +134,7 @@ jobs:
     if: github.event_name == 'pull_request'
     uses: discrapp/.github/.github/workflows/coverage.yml@main
     with:
-      coverage_threshold: 40
+      coverage_threshold: 90
       pr_statements: ${{ needs.test.outputs.statements }}
       pr_branches: ${{ needs.test.outputs.branches }}
       pr_functions: ${{ needs.test.outputs.functions }}
